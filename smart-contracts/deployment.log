@@ -1,0 +1,68 @@
+
+> smart-contracts@1.0.0 deploy:sepolia
+> hardhat run scripts/deploy.ts --network sepolia
+
+Nothing to compile
+Nothing to compile
+
+🚀 Starting Private DEX deployment...
+
+📝 Deploying contracts with account: 0xe68C17C8a4e782e27038d189E1fE8b3a4546c9b9
+💰 Account balance: 0.048274067544029684 ETH
+
+1️⃣  Deploying WhitelistManager...
+✅ WhitelistManager deployed to: 0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F
+
+2️⃣  Deploying Factory...
+✅ Factory deployed to: 0x01DD4b85b88DE66d1d632a799944249da7c58B9A
+
+3️⃣  Deploying Router...
+✅ Router deployed to: 0xc0aeB8bc024b95De284ADe61AF00c436181870d9
+
+4️⃣  Deploying Test Tokens (for testing only)...
+✅ Token A deployed to: 0x0ae33C217fd0BE9D23d1596309095E816ac9e41a
+✅ Token B deployed to: 0x2EecA34C81d95d578D22A9102d40A8FF57C0AE5F
+
+5️⃣  Configuring Whitelist...
+Adding deployer to whitelist...
+✅ Deployer whitelisted
+Adding router to whitelist...
+✅ Router whitelisted
+
+6️⃣  Creating test pair...
+✅ Pair created at: 0xE456D652f42b840951a64ACFd797F2f30724D97f
+
+============================================================
+📋 DEPLOYMENT SUMMARY
+============================================================
+WhitelistManager: 0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F
+Factory:          0x01DD4b85b88DE66d1d632a799944249da7c58B9A
+Router:           0xc0aeB8bc024b95De284ADe61AF00c436181870d9
+Token A:          0x0ae33C217fd0BE9D23d1596309095E816ac9e41a
+Token B:          0x2EecA34C81d95d578D22A9102d40A8FF57C0AE5F
+Pair (A-B):       0xE456D652f42b840951a64ACFd797F2f30724D97f
+============================================================
+
+💾 Deployment Info:
+ {
+  "timestamp": "2025-10-22T07:15:40.139Z",
+  "deployer": "0xe68C17C8a4e782e27038d189E1fE8b3a4546c9b9",
+  "contracts": {
+    "WhitelistManager": "0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F",
+    "Factory": "0x01DD4b85b88DE66d1d632a799944249da7c58B9A",
+    "Router": "0xc0aeB8bc024b95De284ADe61AF00c436181870d9",
+    "TestTokenA": "0x0ae33C217fd0BE9D23d1596309095E816ac9e41a",
+    "TestTokenB": "0x2EecA34C81d95d578D22A9102d40A8FF57C0AE5F",
+    "PairAB": "0xE456D652f42b840951a64ACFd797F2f30724D97f"
+  }
+}
+
+🎉 Deployment complete!
+
+📚 Next steps:
+   1. Verify contracts on Etherscan (if on testnet/mainnet)
+   2. Add addresses to whitelist using WhitelistManager
+   3. Create trading pairs using Factory
+   4. Add liquidity using Router
+   5. Start trading!
+

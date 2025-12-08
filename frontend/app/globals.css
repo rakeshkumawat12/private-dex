@@ -1,0 +1,305 @@
+@import "tailwindcss";
+
+@theme {
+  /* Terminal Phosphor Aesthetic - Dark with Electric Accents */
+  --color-background: oklch(0.08 0.01 150);
+  --color-foreground: oklch(0.92 0.02 150);
+
+  --color-card: oklch(0.10 0.015 150);
+  --color-card-foreground: oklch(0.92 0.02 150);
+
+  /* Phosphor Green Primary */
+  --color-primary: oklch(0.75 0.2 145);
+  --color-primary-foreground: oklch(0.08 0.01 150);
+
+  /* Electric Amber Secondary */
+  --color-secondary: oklch(0.25 0.04 85);
+  --color-secondary-foreground: oklch(0.92 0.02 85);
+
+  --color-muted: oklch(0.15 0.02 150);
+  --color-muted-foreground: oklch(0.55 0.03 150);
+
+  /* Amber Accent */
+  --color-accent: oklch(0.70 0.18 70);
+  --color-accent-foreground: oklch(0.08 0.01 150);
+
+  --color-destructive: oklch(0.55 0.25 25);
+  --color-destructive-foreground: oklch(0.98 0.01 25);
+
+  --color-border: oklch(0.22 0.04 150);
+  --color-input: oklch(0.12 0.02 150);
+  --color-ring: oklch(0.75 0.2 145);
+
+  /* Custom glow colors */
+  --color-glow-primary: oklch(0.75 0.2 145);
+  --color-glow-secondary: oklch(0.70 0.18 70);
+
+  --radius: 0.25rem;
+
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-primary) var(--color-background);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-mono);
+  font-feature-settings: "liga" 0, "calt" 0;
+  letter-spacing: -0.01em;
+  background-image:
+    radial-gradient(ellipse at 0% 0%, oklch(0.75 0.15 145 / 0.06) 0%, transparent 50%),
+    radial-gradient(ellipse at 100% 100%, oklch(0.70 0.12 70 / 0.04) 0%, transparent 50%),
+    linear-gradient(180deg, oklch(0.08 0.01 150) 0%, oklch(0.06 0.01 150) 100%);
+  background-attachment: fixed;
+}
+
+/* Scanline overlay effect */
+.scanlines::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    oklch(0 0 0 / 0.03) 2px,
+    oklch(0 0 0 / 0.03) 4px
+  );
+  pointer-events: none;
+}
+
+/* Terminal-style glass cards */
+.terminal-card {
+  background: linear-gradient(135deg,
+    oklch(0.12 0.02 150 / 0.9) 0%,
+    oklch(0.08 0.015 150 / 0.95) 100%
+  );
+  backdrop-filter: blur(16px);
+  border: 1px solid oklch(0.75 0.2 145 / 0.2);
+  box-shadow:
+    0 0 0 1px oklch(0.75 0.2 145 / 0.05),
+    0 2px 8px oklch(0 0 0 / 0.3),
+    inset 0 1px 0 oklch(1 0 0 / 0.02);
+}
+
+.terminal-card:hover {
+  border-color: oklch(0.75 0.2 145 / 0.4);
+  box-shadow:
+    0 0 0 1px oklch(0.75 0.2 145 / 0.1),
+    0 0 20px oklch(0.75 0.2 145 / 0.1),
+    0 4px 16px oklch(0 0 0 / 0.4),
+    inset 0 1px 0 oklch(1 0 0 / 0.03);
+}
+
+/* Grid pattern for backgrounds */
+.grid-pattern {
+  background-image:
+    linear-gradient(oklch(0.75 0.2 145 / 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, oklch(0.75 0.2 145 / 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Glowing text effects */
+.text-glow {
+  text-shadow:
+    0 0 10px currentColor,
+    0 0 20px currentColor,
+    0 0 40px currentColor;
+}
+
+.text-glow-sm {
+  text-shadow:
+    0 0 5px currentColor,
+    0 0 10px currentColor;
+}
+
+/* Primary gradient - phosphor green */
+.gradient-primary {
+  background: linear-gradient(135deg,
+    oklch(0.75 0.2 145) 0%,
+    oklch(0.65 0.18 160) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Accent gradient - electric amber */
+.gradient-accent {
+  background: linear-gradient(135deg,
+    oklch(0.70 0.18 70) 0%,
+    oklch(0.80 0.16 55) 100%
+  );
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+/* Status indicator dot */
+.status-online {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: oklch(0.75 0.2 145);
+  box-shadow: 0 0 8px oklch(0.75 0.2 145);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px oklch(0.75 0.2 145);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 16px oklch(0.75 0.2 145);
+  }
+}
+
+/* Terminal cursor blink */
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.cursor-blink {
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* Glowing border animation */
+@keyframes border-glow {
+  0%, 100% {
+    border-color: oklch(0.75 0.2 145 / 0.3);
+    box-shadow: 0 0 10px oklch(0.75 0.2 145 / 0.1);
+  }
+  50% {
+    border-color: oklch(0.75 0.2 145 / 0.6);
+    box-shadow: 0 0 20px oklch(0.75 0.2 145 / 0.2);
+  }
+}
+
+.animate-border-glow {
+  animation: border-glow 3s ease-in-out infinite;
+}
+
+/* Typing effect line */
+.typing-line::after {
+  content: "_";
+  animation: cursor-blink 1s step-end infinite;
+}
+
+/* Data stream background */
+@keyframes data-stream {
+  0% { background-position: 0% 0%; }
+  100% { background-position: 0% 100%; }
+}
+
+.data-stream-bg {
+  background: repeating-linear-gradient(
+    0deg,
+    oklch(0.75 0.2 145 / 0.02) 0px,
+    transparent 1px,
+    transparent 3px
+  );
+  background-size: 100% 8px;
+  animation: data-stream 8s linear infinite;
+}
+
+/* Button hover glow */
+.btn-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-glow::before {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  background: linear-gradient(135deg,
+    oklch(0.75 0.2 145) 0%,
+    oklch(0.70 0.18 70) 50%,
+    oklch(0.75 0.2 145) 100%
+  );
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.btn-glow:hover::before {
+  opacity: 1;
+}
+
+/* Holographic shimmer */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.holographic {
+  background: linear-gradient(
+    90deg,
+    oklch(0.75 0.2 145 / 0) 0%,
+    oklch(0.75 0.2 145 / 0.3) 50%,
+    oklch(0.75 0.2 145 / 0) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Hex grid pattern */
+.hex-pattern {
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='49' viewBox='0 0 28 49'%3E%3Cg fill-rule='evenodd'%3E%3Cg fill='%2300ff88' fill-opacity='0.03'%3E%3Cpath d='M13.99 9.25l13 7.5v15l-13 7.5L1 31.75v-15l12.99-7.5zM3 17.9v12.7l10.99 6.34 11-6.35V17.9l-11-6.34L3 17.9zM0 15l12.98-7.5V0h-2v6.35L0 12.69v2.3zm0 18.5L12.98 41v8h-2v-6.85L0 35.81v-2.3zM15 0v7.5L27.99 15H28v-2.31h-.01L17 6.35V0h-2zm0 49v-8l12.99-7.5H28v2.31h-.01L17 42.15V49h-2z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Selection styling */
+::selection {
+  background: oklch(0.75 0.2 145 / 0.3);
+  color: oklch(0.98 0.02 145);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: oklch(0.10 0.01 150);
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0.2 145 / 0.4);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.75 0.2 145 / 0.6);
+}
+
+/* Focus ring */
+*:focus-visible {
+  outline: 2px solid oklch(0.75 0.2 145);
+  outline-offset: 2px;
+}
+
+/* Number input arrows styling */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
