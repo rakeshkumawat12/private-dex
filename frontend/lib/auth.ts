@@ -3,7 +3,8 @@ import { verifyMessage } from 'ethers';
 
 // Admin wallet addresses (owner of WhitelistManager contract)
 export const ADMIN_WALLETS = [
-  '0x24ed4212a29808d2b11d8d23a1bbbe7f8443ac8c', // Production admin wallet
+  '0xe68C17C8a4e782e27038d189E1fE8b3a4546c9b9', // Contract owner (Sepolia)
+  '0x24ed4212a29808d2b11d8d23a1bbbe7f8443ac8c', // Secondary admin wallet
   '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266', // Default Hardhat account #0 (for development)
 ].map(addr => addr.toLowerCase());
 

@@ -7,7 +7,7 @@ export function Toaster() {
 
   return (
     <div className="fixed bottom-0 right-0 z-50 flex max-h-screen w-full flex-col-reverse gap-2 p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]">
-      {toasts.map((toast) => (
+      {toasts.filter((toast) => toast.open !== false).map((toast) => (
         <div
           key={toast.id}
           className={`pointer-events-auto w-full max-w-sm rounded-lg border p-4 shadow-lg backdrop-blur-sm transition-all ${

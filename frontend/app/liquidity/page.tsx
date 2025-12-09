@@ -2,13 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, Minus, AlertCircle, Droplets, ChevronDown, Layers } from "lucide-react";
+import { Plus, Minus, AlertCircle, Droplets, ChevronDown, Layers, ShieldAlert, Loader2 } from "lucide-react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/useToast";
 import { ROUTER_ADDRESS, ROUTER_ABI, ERC20_ABI, FACTORY_ABI, PAIR_ABI, FACTORY_ADDRESS } from "@/lib/contracts";
+import { useWhitelistProtection } from "@/hooks/useWhitelist";
+import Link from "next/link";
 
 const MOCK_TOKENS = [
   { address: "0x0ae33C217fd0BE9D23d1596309095E816ac9e41a", symbol: "TSTA", name: "Test Token A", decimals: 18 },
@@ -18,6 +20,7 @@ const MOCK_TOKENS = [
 export default function LiquidityPage() {
   const { address, isConnected } = useAccount();
   const { toast } = useToast();
+  const { isWhitelisted, isCheckingWhitelist } = useWhitelistProtection(true);
 
   const [mode, setMode] = useState<"add" | "remove">("add");
   const [tokenA, setTokenA] = useState(MOCK_TOKENS[0]);
@@ -145,6 +148,62 @@ export default function LiquidityPage() {
       });
     }
   };
+
+  // Show loading state while checking whitelist
+  if (isCheckingWhitelist) {
+    return (
+      <div className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <Loader2 className="h-8 w-8 mx-auto animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">VERIFYING_WHITELIST_STATUS...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show not whitelisted message
+  if (isConnected && !isWhitelisted) {
+    return (
+      <div className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute top-1/4 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-destructive/5 blur-[100px]" />
+          <div className="grid-pattern absolute inset-0 opacity-20" />
+        </div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="container relative mx-auto px-4 max-w-md"
+        >
+          <div className="terminal-card rounded-lg p-8 text-center space-y-6">
+            <div className="flex justify-center">
+              <div className="p-4 rounded-full bg-destructive/10 border border-destructive/20">
+                <ShieldAlert className="h-8 w-8 text-destructive" />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-xl font-bold text-destructive">ACCESS_DENIED</h2>
+              <p className="text-sm text-muted-foreground">
+                Your wallet address is not whitelisted for this protocol.
+              </p>
+            </div>
+
+            <div className="pt-4 space-y-3">
+              <Link href="/whitelist">
+                <Button variant="glow" size="lg" className="w-full">
+                  REQUEST_WHITELIST_ACCESS
+                </Button>
+              </Link>
+              <p className="text-xs text-muted-foreground">
+                // Submit a request to gain access to swap and liquidity features
+              </p>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)]">

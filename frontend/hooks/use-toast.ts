@@ -16,11 +16,16 @@ type ToastProps = {
 const TOAST_LIMIT = 1;
 const TOAST_REMOVE_DELAY = 1000000;
 
+// Default duration before auto-dismissing toast (10 seconds)
+const DEFAULT_TOAST_DURATION = 10000;
+
 type ToasterToast = ToastProps & {
   id: string;
   title?: React.ReactNode;
   description?: React.ReactNode;
   action?: ToastActionElement;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 };
 
 const actionTypes = {
@@ -161,11 +166,17 @@ function toast({ ...props }: Toast) {
       ...props,
       id,
       open: true,
-      onOpenChange: (open) => {
+      onOpenChange: (open: boolean) => {
         if (!open) dismiss();
       },
     },
   });
+
+  // Auto-dismiss after specified duration (default 10 seconds)
+  const duration = props.duration ?? DEFAULT_TOAST_DURATION;
+  setTimeout(() => {
+    dismiss();
+  }, duration);
 
   return {
     id: id,

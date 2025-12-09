@@ -6,6 +6,8 @@ import { ArrowRight, Lock, Zap, TrendingUp, Shield, ChevronRight } from "lucide-
 import { Button } from "@/components/ui/button";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
+import { useWhitelist } from "@/hooks/useWhitelist";
+import { useRouter } from "next/navigation";
 
 const features = [
   {
@@ -66,6 +68,28 @@ const itemVariants = {
 
 export default function HomePage() {
   const { isConnected } = useAccount();
+  const { isWhitelisted, isCheckingWhitelist } = useWhitelist();
+  const router = useRouter();
+
+  const handleNavigateToFeature = (path: string) => {
+    if (!isConnected) {
+      // Will trigger wallet connect
+      return;
+    }
+
+    if (isCheckingWhitelist) {
+      // Still checking, wait
+      return;
+    }
+
+    if (!isWhitelisted) {
+      // Redirect to whitelist page
+      router.push("/whitelist");
+    } else {
+      // Navigate to the feature
+      router.push(path);
+    }
+  };
 
   return (
     <div className="relative min-h-screen">
@@ -127,12 +151,18 @@ export default function HomePage() {
               variants={itemVariants}
             >
               {isConnected ? (
-                <Link href="/swap">
-                  <Button size="lg" variant="glow" className="group gap-3 text-sm">
-                    <span>INITIALIZE_SWAP</span>
+                <Button
+                  size="lg"
+                  variant="glow"
+                  className="group gap-3 text-sm"
+                  onClick={() => handleNavigateToFeature("/swap")}
+                  disabled={isCheckingWhitelist}
+                >
+                  <span>{isCheckingWhitelist ? "CHECKING_ACCESS..." : "INITIALIZE_SWAP"}</span>
+                  {!isCheckingWhitelist && (
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </Button>
-                </Link>
+                  )}
+                </Button>
               ) : (
                 <ConnectButton.Custom>
                   {({ openConnectModal }) => (
@@ -148,11 +178,15 @@ export default function HomePage() {
                   )}
                 </ConnectButton.Custom>
               )}
-              <Link href="/liquidity">
-                <Button size="lg" variant="outline" className="gap-2 text-sm">
-                  PROVIDE_LIQUIDITY
-                </Button>
-              </Link>
+              <Button
+                size="lg"
+                variant="outline"
+                className="gap-2 text-sm"
+                onClick={() => handleNavigateToFeature("/liquidity")}
+                disabled={!isConnected || isCheckingWhitelist}
+              >
+                {isCheckingWhitelist ? "CHECKING_ACCESS..." : "PROVIDE_LIQUIDITY"}
+              </Button>
             </motion.div>
           </motion.div>
 
@@ -313,12 +347,16 @@ export default function HomePage() {
                     </ConnectButton.Custom>
                   )}
                   {isConnected && (
-                    <Link href="/swap">
-                      <Button size="lg" variant="glow" className="gap-3">
-                        <span>LAUNCH_TERMINAL</span>
-                        <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    </Link>
+                    <Button
+                      size="lg"
+                      variant="glow"
+                      className="gap-3"
+                      onClick={() => handleNavigateToFeature("/swap")}
+                      disabled={isCheckingWhitelist}
+                    >
+                      <span>{isCheckingWhitelist ? "CHECKING_ACCESS..." : "LAUNCH_TERMINAL"}</span>
+                      {!isCheckingWhitelist && <ArrowRight className="h-4 w-4" />}
+                    </Button>
                   )}
                 </div>
               </div>

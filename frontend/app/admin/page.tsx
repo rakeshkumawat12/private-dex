@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useAccount, useSignMessage, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useSignMessage, useWriteContract, useWaitForTransactionReceipt, usePublicClient } from "wagmi";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +42,7 @@ export default function AdminDashboard() {
   const { address, isConnected } = useAccount();
   const { signMessageAsync } = useSignMessage();
   const { writeContractAsync } = useWriteContract();
+  const publicClient = usePublicClient();
   const { toast } = useToast();
 
   const [isAdmin, setIsAdmin] = useState(false);
@@ -149,7 +150,7 @@ export default function AdminDashboard() {
       // Step 1: Add to whitelist on-chain
       toast({
         title: "Processing",
-        description: "Adding wallet to whitelist...",
+        description: "Sending transaction to add wallet to whitelist...",
       });
 
       const hash = await writeContractAsync({
@@ -157,17 +158,34 @@ export default function AdminDashboard() {
         abi: WHITELIST_MANAGER_ABI,
         functionName: "addToWhitelist",
         args: [request.wallet_address as `0x${string}`],
-        gas: 100000n, // Set reasonable gas limit (100k gas units)
       });
 
       toast({
         title: "Transaction Submitted",
-        description: "Waiting for confirmation...",
+        description: "Waiting for blockchain confirmation...",
       });
 
-      // Step 2: Update database after transaction is confirmed
-      // For now, we'll update immediately with the hash
-      // In production, you might want to wait for confirmations
+      // Step 2: Wait for transaction to be mined and confirmed
+      if (!publicClient) {
+        throw new Error("Unable to connect to blockchain");
+      }
+
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: hash as `0x${string}`,
+        confirmations: 1,
+      });
+
+      // Check if transaction was successful
+      if (receipt.status === 'reverted') {
+        throw new Error(`Transaction failed on-chain. View details: https://sepolia.etherscan.io/tx/${hash}`);
+      }
+
+      toast({
+        title: "Transaction Confirmed",
+        description: "Updating database...",
+      });
+
+      // Step 3: Update database after transaction is confirmed successfully
       const response = await fetch(`/api/whitelist/admin/${request.id}`, {
         method: "PATCH",
         headers: {
@@ -181,23 +199,33 @@ export default function AdminDashboard() {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update request in database");
+        throw new Error("Transaction succeeded but failed to update database. Please refresh.");
       }
 
       toast({
-        title: "Request Approved",
-        description: `Wallet ${request.wallet_address} has been whitelisted!`,
+        title: "Request Approved ✅",
+        description: `Wallet ${request.wallet_address} has been successfully whitelisted!`,
       });
 
       // Refresh requests
       await fetchRequests();
     } catch (error: any) {
       console.error("Error approving request:", error);
-      toast({
-        title: "Approval Failed",
-        description: error.message || "Failed to approve request",
-        variant: "destructive",
-      });
+
+      // Check if error is due to permission
+      if (error.message?.includes("Ownable") || error.message?.includes("owner")) {
+        toast({
+          title: "Permission Denied",
+          description: "You are not the contract owner. Please use the correct admin wallet.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Approval Failed",
+          description: error.message || "Failed to approve request. Check console for details.",
+          variant: "destructive",
+        });
+      }
     } finally {
       setProcessingId(null);
     }

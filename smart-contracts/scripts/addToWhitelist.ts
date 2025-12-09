@@ -3,7 +3,7 @@ import { network } from "hardhat";
 const { ethers } = await network.connect();
 
 // Deployed contract addresses on Sepolia
-const WHITELIST_MANAGER_ADDRESS = "0xf85b33a94947F55f84B0228008C5CFd47a42B7EC";
+const WHITELIST_MANAGER_ADDRESS = "0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F";
 
 async function main() {
   const [signer] = await ethers.getSigners();
@@ -21,14 +21,14 @@ async function main() {
     return;
   }
 
-  // Example: Add an address to whitelist
-  // Replace with the address you want to whitelist
-  const ADDRESS_TO_WHITELIST = "0x0000000000000000000000000000000000000000"; // Replace this!
+  // Get address from environment variable or use the deployer's address
+  const ADDRESS_TO_WHITELIST = process.env.ADDRESS_TO_WHITELIST || signer.address;
 
-  if (ADDRESS_TO_WHITELIST === "0x0000000000000000000000000000000000000000") {
-    console.log("\n⚠️  Please edit this script and replace ADDRESS_TO_WHITELIST with the actual address.");
-    console.log("Example usage:");
-    console.log('  const ADDRESS_TO_WHITELIST = "0x1234...";');
+  console.log("Address to whitelist:", ADDRESS_TO_WHITELIST);
+
+  if (!ethers.isAddress(ADDRESS_TO_WHITELIST)) {
+    console.log("\n❌ Invalid Ethereum address");
+    console.log("Usage: ADDRESS_TO_WHITELIST=0x... npm run whitelist:sepolia");
     return;
   }
 
