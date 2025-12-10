@@ -1,6 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Enable Turbopack (Next.js 16 default)
+  turbopack: {},
   webpack: (config, { isServer }) => {
     // Exclude test files and unnecessary files from the build
     config.module = config.module || {};
@@ -39,8 +41,6 @@ const nextConfig = {
 
     return config;
   },
-  // Disable Turbopack for now as it has issues with certain dependencies
-  // turbopack: {},
 }
 
 module.exports = nextConfig

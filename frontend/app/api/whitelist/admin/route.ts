@@ -21,12 +21,12 @@ export async function GET(request: NextRequest) {
 
     let requests;
     if (status && ['pending', 'approved', 'rejected'].includes(status)) {
-      requests = whitelistDB.getAllRequests(status);
+      requests = await whitelistDB.getAllRequests(status);
     } else {
-      requests = whitelistDB.getAllRequests();
+      requests = await whitelistDB.getAllRequests();
     }
 
-    const stats = whitelistDB.getStats();
+    const stats = await whitelistDB.getStats();
 
     return NextResponse.json(
       {

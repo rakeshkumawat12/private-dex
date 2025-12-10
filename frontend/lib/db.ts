@@ -1,32 +1,14 @@
-import Database from 'better-sqlite3';
-import path from 'path';
+import { createClient } from '@supabase/supabase-js';
 
-// Database will be stored in the project root
-const dbPath = path.join(process.cwd(), 'whitelist-requests.db');
-const db = new Database(dbPath);
+// Initialize Supabase client
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// Enable WAL mode for better concurrent access
-db.pragma('journal_mode = WAL');
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error('Missing Supabase environment variables');
+}
 
-// Create whitelist_requests table
-db.exec(`
-  CREATE TABLE IF NOT EXISTS whitelist_requests (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    wallet_address TEXT NOT NULL UNIQUE COLLATE NOCASE,
-    email TEXT,
-    reason TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'approved', 'rejected')),
-    tx_hash TEXT,
-    created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
-    reviewed_by TEXT,
-    reviewed_at INTEGER
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_status ON whitelist_requests(status);
-  CREATE INDEX IF NOT EXISTS idx_wallet_address ON whitelist_requests(wallet_address);
-  CREATE INDEX IF NOT EXISTS idx_created_at ON whitelist_requests(created_at DESC);
-`);
+export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Types
 export interface WhitelistRequest {
@@ -36,10 +18,10 @@ export interface WhitelistRequest {
   reason: string;
   status: 'pending' | 'approved' | 'rejected';
   tx_hash?: string;
-  created_at: number;
-  updated_at: number;
+  created_at: string;
+  updated_at: string;
   reviewed_by?: string;
-  reviewed_at?: number;
+  reviewed_at?: string;
 }
 
 export interface CreateWhitelistRequest {
@@ -57,114 +39,157 @@ export interface UpdateWhitelistRequest {
 // Database operations
 export const whitelistDB = {
   // Create a new whitelist request
-  createRequest: (data: CreateWhitelistRequest): WhitelistRequest => {
-    const stmt = db.prepare(`
-      INSERT INTO whitelist_requests (wallet_address, email, reason)
-      VALUES (?, ?, ?)
-    `);
+  createRequest: async (data: CreateWhitelistRequest): Promise<WhitelistRequest> => {
+    const { data: result, error } = await supabase
+      .from('whitelist_requests')
+      .insert({
+        wallet_address: data.wallet_address.toLowerCase(),
+        email: data.email || null,
+        reason: data.reason,
+      })
+      .select()
+      .single();
 
-    const result = stmt.run(
-      data.wallet_address.toLowerCase(),
-      data.email || null,
-      data.reason
-    );
+    if (error) {
+      throw new Error(`Failed to create request: ${error.message}`);
+    }
 
-    return whitelistDB.getRequestById(result.lastInsertRowid as number)!;
+    return result as WhitelistRequest;
   },
 
   // Get request by ID
-  getRequestById: (id: number): WhitelistRequest | undefined => {
-    const stmt = db.prepare('SELECT * FROM whitelist_requests WHERE id = ?');
-    return stmt.get(id) as WhitelistRequest | undefined;
+  getRequestById: async (id: number): Promise<WhitelistRequest | null> => {
+    const { data, error } = await supabase
+      .from('whitelist_requests')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No rows returned
+        return null;
+      }
+      throw new Error(`Failed to get request: ${error.message}`);
+    }
+
+    return data as WhitelistRequest;
   },
 
   // Get request by wallet address
-  getRequestByWallet: (walletAddress: string): WhitelistRequest | undefined => {
-    const stmt = db.prepare('SELECT * FROM whitelist_requests WHERE wallet_address = ?');
-    return stmt.get(walletAddress.toLowerCase()) as WhitelistRequest | undefined;
+  getRequestByWallet: async (walletAddress: string): Promise<WhitelistRequest | null> => {
+    const { data, error } = await supabase
+      .from('whitelist_requests')
+      .select('*')
+      .eq('wallet_address', walletAddress.toLowerCase())
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        // No rows returned
+        return null;
+      }
+      throw new Error(`Failed to get request: ${error.message}`);
+    }
+
+    return data as WhitelistRequest;
   },
 
   // Get all requests with optional status filter
-  getAllRequests: (status?: string): WhitelistRequest[] => {
-    let stmt;
+  getAllRequests: async (status?: string): Promise<WhitelistRequest[]> => {
+    let query = supabase
+      .from('whitelist_requests')
+      .select('*')
+      .order('created_at', { ascending: false });
+
     if (status) {
-      stmt = db.prepare('SELECT * FROM whitelist_requests WHERE status = ? ORDER BY created_at DESC');
-      return stmt.all(status) as WhitelistRequest[];
-    } else {
-      stmt = db.prepare('SELECT * FROM whitelist_requests ORDER BY created_at DESC');
-      return stmt.all() as WhitelistRequest[];
+      query = query.eq('status', status);
     }
+
+    const { data, error } = await query;
+
+    if (error) {
+      throw new Error(`Failed to get requests: ${error.message}`);
+    }
+
+    return (data as WhitelistRequest[]) || [];
   },
 
   // Get pending requests count
-  getPendingCount: (): number => {
-    const stmt = db.prepare('SELECT COUNT(*) as count FROM whitelist_requests WHERE status = ?');
-    const result = stmt.get('pending') as { count: number };
-    return result.count;
+  getPendingCount: async (): Promise<number> => {
+    const { count, error } = await supabase
+      .from('whitelist_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
+
+    if (error) {
+      throw new Error(`Failed to get pending count: ${error.message}`);
+    }
+
+    return count || 0;
   },
 
   // Update request status
-  updateRequestStatus: (id: number, update: UpdateWhitelistRequest): WhitelistRequest | undefined => {
-    const now = Math.floor(Date.now() / 1000);
+  updateRequestStatus: async (
+    id: number,
+    update: UpdateWhitelistRequest
+  ): Promise<WhitelistRequest | null> => {
+    const { data, error } = await supabase
+      .from('whitelist_requests')
+      .update({
+        status: update.status,
+        reviewed_by: update.reviewed_by.toLowerCase(),
+        reviewed_at: new Date().toISOString(),
+        tx_hash: update.tx_hash || null,
+      })
+      .eq('id', id)
+      .select()
+      .single();
 
-    const stmt = db.prepare(`
-      UPDATE whitelist_requests
-      SET status = ?,
-          reviewed_by = ?,
-          reviewed_at = ?,
-          tx_hash = ?,
-          updated_at = ?
-      WHERE id = ?
-    `);
+    if (error) {
+      throw new Error(`Failed to update request: ${error.message}`);
+    }
 
-    stmt.run(
-      update.status,
-      update.reviewed_by.toLowerCase(),
-      now,
-      update.tx_hash || null,
-      now,
-      id
-    );
-
-    return whitelistDB.getRequestById(id);
+    return data as WhitelistRequest;
   },
 
   // Check if wallet has existing request
-  hasExistingRequest: (walletAddress: string): boolean => {
-    const request = whitelistDB.getRequestByWallet(walletAddress);
+  hasExistingRequest: async (walletAddress: string): Promise<boolean> => {
+    const request = await whitelistDB.getRequestByWallet(walletAddress);
     return !!request;
   },
 
   // Get statistics
-  getStats: () => {
-    const stmt = db.prepare(`
-      SELECT
-        COUNT(*) as total,
-        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending,
-        SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) as approved,
-        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected
-      FROM whitelist_requests
-    `);
-    return stmt.get() as {
-      total: number;
-      pending: number;
-      approved: number;
-      rejected: number;
+  getStats: async () => {
+    const { data, error } = await supabase
+      .from('whitelist_requests')
+      .select('status');
+
+    if (error) {
+      throw new Error(`Failed to get stats: ${error.message}`);
+    }
+
+    const stats = {
+      total: data.length,
+      pending: data.filter((r) => r.status === 'pending').length,
+      approved: data.filter((r) => r.status === 'approved').length,
+      rejected: data.filter((r) => r.status === 'rejected').length,
     };
+
+    return stats;
   },
 
   // Delete request (admin only - for testing)
-  deleteRequest: (id: number): void => {
-    const stmt = db.prepare('DELETE FROM whitelist_requests WHERE id = ?');
-    stmt.run(id);
+  deleteRequest: async (id: number): Promise<void> => {
+    const { error } = await supabase
+      .from('whitelist_requests')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      throw new Error(`Failed to delete request: ${error.message}`);
+    }
   },
 };
 
-// Close database on process exit
-process.on('exit', () => db.close());
-process.on('SIGINT', () => {
-  db.close();
-  process.exit(0);
-});
-
-export default db;
+export default supabase;

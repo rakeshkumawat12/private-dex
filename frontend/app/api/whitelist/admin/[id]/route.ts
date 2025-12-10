@@ -41,7 +41,7 @@ export async function PATCH(
     }
 
     // Check if request exists
-    const existingRequest = whitelistDB.getRequestById(requestId);
+    const existingRequest = await whitelistDB.getRequestById(requestId);
     if (!existingRequest) {
       return NextResponse.json(
         { error: 'Request not found' },
@@ -66,7 +66,7 @@ export async function PATCH(
     }
 
     // Update the request
-    const updatedRequest = whitelistDB.updateRequestStatus(requestId, {
+    const updatedRequest = await whitelistDB.updateRequestStatus(requestId, {
       status,
       reviewed_by: authResult.address!,
       tx_hash: txHash,
@@ -114,7 +114,7 @@ export async function DELETE(
     }
 
     // Check if request exists
-    const existingRequest = whitelistDB.getRequestById(requestId);
+    const existingRequest = await whitelistDB.getRequestById(requestId);
     if (!existingRequest) {
       return NextResponse.json(
         { error: 'Request not found' },
@@ -123,7 +123,7 @@ export async function DELETE(
     }
 
     // Delete the request
-    whitelistDB.deleteRequest(requestId);
+    await whitelistDB.deleteRequest(requestId);
 
     return NextResponse.json(
       { message: 'Request deleted successfully' },

@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Check if wallet already has a request
-    const existingRequest = whitelistDB.getRequestByWallet(walletAddress);
+    const existingRequest = await whitelistDB.getRequestByWallet(walletAddress);
     if (existingRequest) {
       return NextResponse.json(
         {
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create the request
-    const newRequest = whitelistDB.createRequest({
+    const newRequest = await whitelistDB.createRequest({
       wallet_address: walletAddress,
       email: email || undefined,
       reason: reason.trim(),
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const existingRequest = whitelistDB.getRequestByWallet(walletAddress);
+    const existingRequest = await whitelistDB.getRequestByWallet(walletAddress);
 
     if (!existingRequest) {
       return NextResponse.json(
