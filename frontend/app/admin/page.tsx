@@ -158,6 +158,7 @@ export default function AdminDashboard() {
         abi: WHITELIST_MANAGER_ABI,
         functionName: "addToWhitelist",
         args: [request.wallet_address as `0x${string}`],
+        gas: BigInt(150000), // Set reasonable gas limit for simple whitelist operation
       });
 
       toast({
