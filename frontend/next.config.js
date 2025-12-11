@@ -1,15 +1,23 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  // Enable Turbopack (Next.js 16 default)
+  // Turbopack config for dev mode
   turbopack: {},
+  // Webpack config for production builds
   webpack: (config, { isServer }) => {
-    // Exclude test files and unnecessary files from the build
+    // Exclude test files and unnecessary files from thread-stream
     config.module = config.module || {};
     config.module.rules = config.module.rules || [];
 
+    // Ignore test files, benchmarks, and non-JS files from thread-stream
     config.module.rules.push({
-      test: /node_modules\/thread-stream\/(test|bench\.js|LICENSE|README\.md)/,
+      test: /node_modules[\\/]thread-stream[\\/](test|bench\.js|LICENSE|README\.md)/,
+      loader: 'ignore-loader'
+    });
+
+    // Ignore pino-pretty (optional dependency)
+    config.module.rules.push({
+      test: /node_modules[\\/]pino-pretty/,
       loader: 'ignore-loader'
     });
 
@@ -30,17 +38,18 @@ const nextConfig = {
         'pino-pretty': false,
         '@react-native-async-storage/async-storage': false,
       };
-    } else {
-      // Handle optional server-side dependencies
-      config.resolve.fallback = {
-        ...config.resolve.fallback,
-        'pino-pretty': false,
-        '@react-native-async-storage/async-storage': false,
-      };
     }
+
+    // Ignore certain problematic modules
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      'pino-pretty': false,
+    };
 
     return config;
   },
+  // Exclude problematic packages from server components bundling
+  serverExternalPackages: ['pino', 'pino-pretty', 'thread-stream'],
 }
 
 module.exports = nextConfig

@@ -19,7 +19,7 @@ const plexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "VΛULT :: Private DEX Protocol",
+  title: "VΛULT - Private DEX",
   description: "Permissioned liquidity. Zero trust. Maximum sovereignty.",
 };
 
