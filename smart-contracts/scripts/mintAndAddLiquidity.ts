@@ -20,17 +20,17 @@ async function main() {
 
   // Step 1: Mint tokens
   console.log("1️⃣  Minting test tokens...");
-  const mintAmount = ethers.parseEther("1000");
+  const mintAmount = ethers.parseEther("30000"); // Mint extra for future use
 
   console.log("Minting Token A...");
   let tx = await tokenA.mint(signer.address, mintAmount);
   await tx.wait();
-  console.log("✅ Minted 1000 Token A");
+  console.log("✅ Minted 30000 Token A");
 
   console.log("Minting Token B...");
   tx = await tokenB.mint(signer.address, mintAmount);
   await tx.wait();
-  console.log("✅ Minted 1000 Token B");
+  console.log("✅ Minted 30000 Token B");
 
   // Check balances
   const balanceA = await tokenA.balanceOf(signer.address);
@@ -41,7 +41,8 @@ async function main() {
 
   // Step 2: Approve tokens
   console.log("\n2️⃣  Approving tokens for Router...");
-  const approveAmount = ethers.parseEther("100");
+  const approveAmount = ethers.parseEther("10000"); // Approve 10,000 Token A
+  const approveBAmount = ethers.parseEther("20000"); // Approve 20,000 Token B
 
   console.log("Approving Token A...");
   tx = await tokenA.approve(ROUTER_ADDRESS, approveAmount);
@@ -49,18 +50,18 @@ async function main() {
   console.log("✅ Token A approved");
 
   console.log("Approving Token B...");
-  tx = await tokenB.approve(ROUTER_ADDRESS, approveAmount);
+  tx = await tokenB.approve(ROUTER_ADDRESS, approveBAmount);
   await tx.wait();
   console.log("✅ Token B approved");
 
   // Step 3: Add liquidity
   console.log("\n3️⃣  Adding liquidity...");
-  const amountA = ethers.parseEther("100");
-  const amountB = ethers.parseEther("200"); // 1:2 ratio
+  const amountA = ethers.parseEther("10000"); // 10,000 Token A
+  const amountB = ethers.parseEther("20000"); // 20,000 Token B (1:2 ratio)
 
   const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now
 
-  console.log("Adding 100 Token A and 200 Token B...");
+  console.log("Adding 10,000 Token A and 20,000 Token B...");
   tx = await router.addLiquidity(
     TOKEN_A_ADDRESS,
     TOKEN_B_ADDRESS,

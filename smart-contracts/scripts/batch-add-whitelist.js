@@ -5,7 +5,7 @@ const hre = require("hardhat");
  * Usage: npx hardhat run scripts/batch-add-whitelist.js --network sepolia
  */
 async function main() {
-  const WHITELIST_MANAGER_ADDRESS = "0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F";
+  const WHITELIST_MANAGER_ADDRESS = "0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E";
 
   // Add addresses here
   const addressesToWhitelist = [

@@ -13,8 +13,10 @@ import { useWhitelistProtection } from "@/hooks/useWhitelist";
 import Link from "next/link";
 
 const MOCK_TOKENS = [
-  { address: "0x0ae33C217fd0BE9D23d1596309095E816ac9e41a", symbol: "TSTA", name: "Test Token A", decimals: 18 },
-  { address: "0x2EecA34C81d95d578D22A9102d40A8FF57C0AE5F", symbol: "TSTB", name: "Test Token B", decimals: 18 },
+  { address: "0x35287D9fDb7a1E7CC2212Fd1d57F8ae71cCA030A", symbol: "WETH", name: "Wrapped Ether", decimals: 18 },
+  { address: "0x01134D4D7A522a5d601413dD3Bf33859B193063e", symbol: "USDC", name: "USD Coin", decimals: 6 },
+  { address: "0x64c178393Bbe0cAe2a78A19c58e9B3944c2D5B42", symbol: "DAI", name: "Dai Stablecoin", decimals: 18 },
+  { address: "0x5ccE1Fda0efe9A51302B3F26E3ca0d672536c2F7", symbol: "USDT", name: "Tether USD", decimals: 6 },
 ];
 
 export default function SwapPage() {
@@ -318,7 +320,7 @@ export default function SwapPage() {
               </div>
 
               {/* Swap Button */}
-              <div className="flex justify-center -my-1 relative z-10">
+              <div className="flex justify-center -my-1 relative z-10" style={{ margin: "0.7rem 0" }}>
                 <motion.button
                   onClick={handleSwapTokens}
                   whileHover={{ scale: 1.1, rotate: 180 }}

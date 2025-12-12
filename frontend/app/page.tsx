@@ -37,10 +37,10 @@ const features = [
 ];
 
 const stats = [
-  { label: "TOTAL_VALUE_LOCKED", value: "$2.4M", prefix: ">" },
-  { label: "24H_VOLUME", value: "$156K", prefix: ">" },
-  { label: "ACTIVE_PAIRS", value: "12", prefix: ">" },
-  { label: "WHITELISTED", value: "342", prefix: ">" },
+  { label: "TOTAL_VALUE_LOCKED", value: "$180K", prefix: ">" },
+  { label: "24H_VOLUME", value: "$12K", prefix: ">" },
+  { label: "ACTIVE_PAIRS", value: "4", prefix: ">" },
+  { label: "WHITELISTED", value: "1", prefix: ">" },
 ];
 
 const containerVariants = {

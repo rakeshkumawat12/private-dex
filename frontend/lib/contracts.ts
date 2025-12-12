@@ -1,7 +1,7 @@
 // Contract addresses - Deployed on Sepolia Testnet
-export const ROUTER_ADDRESS = (process.env.NEXT_PUBLIC_ROUTER_ADDRESS || '0xc0aeB8bc024b95De284ADe61AF00c436181870d9') as `0x${string}`;
-export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS || '0x01DD4b85b88DE66d1d632a799944249da7c58B9A') as `0x${string}`;
-export const WHITELIST_MANAGER_ADDRESS = (process.env.NEXT_PUBLIC_WHITELIST_MANAGER_ADDRESS || '0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F') as `0x${string}`;
+export const ROUTER_ADDRESS = (process.env.NEXT_PUBLIC_ROUTER_ADDRESS || '0x05b6B7d9cE4BA0f12040664167b34382E050eC87') as `0x${string}`;
+export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS || '0xC36EE51C750F6290977D212FEE5C0Af95Fc3bC57') as `0x${string}`;
+export const WHITELIST_MANAGER_ADDRESS = (process.env.NEXT_PUBLIC_WHITELIST_MANAGER_ADDRESS || '0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E') as `0x${string}`;
 
 // Router ABI - essential functions for DEX operations
 export const ROUTER_ABI = [

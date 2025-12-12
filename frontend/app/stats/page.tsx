@@ -7,8 +7,10 @@ import { formatUnits } from "viem";
 import { FACTORY_ADDRESS, FACTORY_ABI, PAIR_ABI } from "@/lib/contracts";
 
 const MOCK_TOKENS = [
-  { address: "0x0ae33C217fd0BE9D23d1596309095E816ac9e41a", symbol: "TSTA", decimals: 18 },
-  { address: "0x2EecA34C81d95d578D22A9102d40A8FF57C0AE5F", symbol: "TSTB", decimals: 18 },
+  { address: "0x35287D9fDb7a1E7CC2212Fd1d57F8ae71cCA030A", symbol: "WETH", decimals: 18 },
+  { address: "0x01134D4D7A522a5d601413dD3Bf33859B193063e", symbol: "USDC", decimals: 6 },
+  { address: "0x64c178393Bbe0cAe2a78A19c58e9B3944c2D5B42", symbol: "DAI", decimals: 18 },
+  { address: "0x5ccE1Fda0efe9A51302B3F26E3ca0d672536c2F7", symbol: "USDT", decimals: 6 },
 ];
 
 const containerVariants = {
@@ -170,15 +172,43 @@ export default function StatsPage() {
     functionName: "allPairsLength",
   });
 
-  const { data: pairAddress } = useReadContract({
+  // Fetch all 4 pair addresses
+  const { data: pair0 } = useReadContract({
     address: FACTORY_ADDRESS,
     abi: FACTORY_ABI,
     functionName: "getPair",
-    args: [
-      MOCK_TOKENS[0].address as `0x${string}`,
-      MOCK_TOKENS[1].address as `0x${string}`,
-    ],
+    args: [MOCK_TOKENS[0].address as `0x${string}`, MOCK_TOKENS[1].address as `0x${string}`],
   });
+
+  const { data: pair1 } = useReadContract({
+    address: FACTORY_ADDRESS,
+    abi: FACTORY_ABI,
+    functionName: "getPair",
+    args: [MOCK_TOKENS[0].address as `0x${string}`, MOCK_TOKENS[2].address as `0x${string}`],
+  });
+
+  const { data: pair2 } = useReadContract({
+    address: FACTORY_ADDRESS,
+    abi: FACTORY_ABI,
+    functionName: "getPair",
+    args: [MOCK_TOKENS[1].address as `0x${string}`, MOCK_TOKENS[3].address as `0x${string}`],
+  });
+
+  const { data: pair3 } = useReadContract({
+    address: FACTORY_ADDRESS,
+    abi: FACTORY_ABI,
+    functionName: "getPair",
+    args: [MOCK_TOKENS[2].address as `0x${string}`, MOCK_TOKENS[3].address as `0x${string}`],
+  });
+
+  const pools = [
+    { tokenA: MOCK_TOKENS[0], tokenB: MOCK_TOKENS[1], address: pair0 },
+    { tokenA: MOCK_TOKENS[0], tokenB: MOCK_TOKENS[2], address: pair1 },
+    { tokenA: MOCK_TOKENS[1], tokenB: MOCK_TOKENS[3], address: pair2 },
+    { tokenA: MOCK_TOKENS[2], tokenB: MOCK_TOKENS[3], address: pair3 },
+  ];
+
+  const validPools = pools.filter(p => p.address && p.address !== "0x0000000000000000000000000000000000000000");
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)]">
@@ -268,16 +298,17 @@ export default function StatsPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {pairAddress && pairAddress !== "0x0000000000000000000000000000000000000000" && (
+              {validPools.map((pool, index) => (
                 <PoolCard
-                  tokenA={MOCK_TOKENS[0]}
-                  tokenB={MOCK_TOKENS[1]}
-                  pairAddress={pairAddress}
+                  key={index}
+                  tokenA={pool.tokenA}
+                  tokenB={pool.tokenB}
+                  pairAddress={pool.address as string}
                 />
-              )}
+              ))}
             </div>
 
-            {(!pairAddress || pairAddress === "0x0000000000000000000000000000000000000000") && (
+            {validPools.length === 0 && (
               <motion.div variants={itemVariants}>
                 <div className="terminal-card rounded-lg overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-primary/10 bg-primary/5">

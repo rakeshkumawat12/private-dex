@@ -14,7 +14,8 @@ const navItems = [
   { name: "SWAP", href: "/swap", shortcut: "F1" },
   { name: "LIQUIDITY", href: "/liquidity", shortcut: "F2" },
   { name: "STATS", href: "/stats", shortcut: "F3" },
-  { name: "WHITELIST", href: "/whitelist", shortcut: "F4", icon: ShieldCheck },
+  { name: "FAUCET", href: "/faucet", shortcut: "F4" },
+  { name: "WHITELIST", href: "/whitelist", shortcut: "F5", icon: ShieldCheck },
 ];
 
 export function Navbar() {

@@ -5,7 +5,7 @@ import * as path from "path";
 const { ethers } = await network.connect();
 
 // Deployed contract addresses on Sepolia
-const WHITELIST_MANAGER_ADDRESS = "0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F";
+const WHITELIST_MANAGER_ADDRESS = "0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E";
 
 // Addresses that were "approved" in database but failed on-chain
 const APPROVED_ADDRESSES = [

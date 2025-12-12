@@ -3,7 +3,7 @@ import { network } from "hardhat";
 const { ethers } = await network.connect();
 
 // WhitelistManager contract address on Sepolia
-const WHITELIST_MANAGER_ADDRESS = "0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F";
+const WHITELIST_MANAGER_ADDRESS = "0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E";
 
 // New owner address
 const NEW_OWNER_ADDRESS = "0x24Ed4212a29808D2B11d8D23a1bbBe7f8443ac8C";

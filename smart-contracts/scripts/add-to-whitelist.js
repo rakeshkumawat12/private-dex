@@ -5,7 +5,7 @@ const hre = require("hardhat");
  * Usage: ADDRESS_TO_WHITELIST=0x... npx hardhat run scripts/add-to-whitelist.js --network sepolia
  */
 async function main() {
-  const WHITELIST_MANAGER_ADDRESS = "0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F";
+  const WHITELIST_MANAGER_ADDRESS = "0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E";
 
   const [deployer] = await hre.ethers.getSigners();
   const addressToWhitelist = process.env.ADDRESS_TO_WHITELIST;
