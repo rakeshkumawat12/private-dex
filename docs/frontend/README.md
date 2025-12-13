@@ -30,6 +30,8 @@ frontend/
 │   │   └── page.tsx         # Swap interface (/swap)
 │   ├── liquidity/
 │   │   └── page.tsx         # Liquidity management (/liquidity)
+│   ├── faucet/
+│   │   └── page.tsx         # Token faucet (/faucet)
 │   ├── whitelist/
 │   │   └── page.tsx         # Whitelist request (/whitelist)
 │   ├── admin/
@@ -103,6 +105,16 @@ Liquidity management:
 - LP token balance
 - Slippage protection
 - Transaction confirmation
+
+### Faucet Page (`/faucet`)
+Test token distribution:
+- One-click token minting
+- Sequential minting of all test tokens (WETH, USDC, DAI, USDT)
+- Progress tracking with visual indicators
+- Transaction status and links
+- Instructions and token addresses
+- 1000 tokens minted per type
+- Perfect for quick testing and demos
 
 ### Whitelist Page (`/whitelist`)
 Access request form:

@@ -70,27 +70,53 @@ npx hardhat run scripts/deploy.ts --network sepolia
 ✅ Router deployed to: 0x...
 
 4️⃣  Deploying Test Tokens...
-✅ Token A deployed to: 0x...
-✅ Token B deployed to: 0x...
+✅ WETH deployed to: 0x...
+✅ USDC deployed to: 0x...
+✅ DAI deployed to: 0x...
+✅ USDT deployed to: 0x...
+
+5️⃣  Creating liquidity pools...
+✅ WETH/USDC pool created
+✅ WETH/DAI pool created
+✅ USDC/USDT pool created
+✅ DAI/USDT pool created
 
 ============================================================
 📋 DEPLOYMENT SUMMARY
 ============================================================
-WhitelistManager: 0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F
-Factory:          0x01DD4b85b88DE66d1d632a799944249da7c58B9A
-Router:           0xc0aeB8bc024b95De284ADe61AF00c436181870d9
-Token A:          0x0ae33C217fd0BE9D23d1596309095E816ac9e41a
-Token B:          0x2EecA34C81d95d578D22A9102d40A8FF57C0AE5F
+WhitelistManager: 0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E
+Factory:          0xC36EE51C750F6290977D212FEE5C0Af95Fc3bC57
+Router:           0x05b6B7d9cE4BA0f12040664167b34382E050eC87
+
+Test Tokens:
+WETH:             0x35287D9fDb7a1E7CC2212Fd1d57F8ae71cCA030A
+USDC:             0x01134D4D7A522a5d601413dD3Bf33859B193063e
+DAI:              0x64c178393Bbe0cAe2a78A19c58e9B3944c2D5B42
+USDT:             0x5ccE1Fda0efe9A51302B3F26E3ca0d672536c2F7
+
+Liquidity Pools:
+WETH/USDC:        0xcC885a0801eEA25E53daAD94008CF89B4299D208
+WETH/DAI:         0xc6E56F5e6Af03535180f9ad416942a557DCFeEd2
+USDC/USDT:        0xf2cb6319FC611447A4A37091877658DbEf121c29
+DAI/USDT:         0xD21800b9587c761De6C07342c1f9E3f7ebb8cd90
 ============================================================
 ```
 
-### Verify Contracts (Optional)
+### Verify Contracts
+
+Contracts are verified on Blockscout by default. For Etherscan verification:
 
 ```bash
+# Add your Etherscan API key to .env
+ETHERSCAN_API_KEY=your_key
+
+# Verify contracts
 npx hardhat verify --network sepolia WHITELIST_MANAGER_ADDRESS
 npx hardhat verify --network sepolia FACTORY_ADDRESS "WHITELIST_ADDRESS"
 npx hardhat verify --network sepolia ROUTER_ADDRESS "FACTORY_ADDRESS" "WHITELIST_ADDRESS"
 ```
+
+**Note:** If Etherscan verification fails due to bytecode mismatch, contracts are still accessible and verified on [Blockscout](https://eth-sepolia.blockscout.com).
 
 ### Post-Deployment Setup
 
@@ -185,13 +211,15 @@ Create `.env.local` for local testing:
 NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your_project_id
 
 # Contract Addresses (from deployment)
-NEXT_PUBLIC_ROUTER_ADDRESS=0xc0aeB8bc024b95De284ADe61AF00c436181870d9
-NEXT_PUBLIC_FACTORY_ADDRESS=0x01DD4b85b88DE66d1d632a799944249da7c58B9A
-NEXT_PUBLIC_WHITELIST_MANAGER_ADDRESS=0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F
+NEXT_PUBLIC_ROUTER_ADDRESS=0x05b6B7d9cE4BA0f12040664167b34382E050eC87
+NEXT_PUBLIC_FACTORY_ADDRESS=0xC36EE51C750F6290977D212FEE5C0Af95Fc3bC57
+NEXT_PUBLIC_WHITELIST_MANAGER_ADDRESS=0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E
 
 # Test Tokens
-NEXT_PUBLIC_TOKEN_A_ADDRESS=0x0ae33C217fd0BE9D23d1596309095E816ac9e41a
-NEXT_PUBLIC_TOKEN_B_ADDRESS=0x2EecA34C81d95d578D22A9102d40A8FF57C0AE5F
+NEXT_PUBLIC_WETH_ADDRESS=0x35287D9fDb7a1E7CC2212Fd1d57F8ae71cCA030A
+NEXT_PUBLIC_USDC_ADDRESS=0x01134D4D7A522a5d601413dD3Bf33859B193063e
+NEXT_PUBLIC_DAI_ADDRESS=0x64c178393Bbe0cAe2a78A19c58e9B3944c2D5B42
+NEXT_PUBLIC_USDT_ADDRESS=0x5ccE1Fda0efe9A51302B3F26E3ca0d672536c2F7
 
 # Network
 NEXT_PUBLIC_CHAIN_ID=11155111
@@ -238,8 +266,10 @@ In Vercel Dashboard → Settings → Environment Variables:
 | `NEXT_PUBLIC_ROUTER_ADDRESS` | Router contract address |
 | `NEXT_PUBLIC_FACTORY_ADDRESS` | Factory contract address |
 | `NEXT_PUBLIC_WHITELIST_MANAGER_ADDRESS` | WhitelistManager address |
-| `NEXT_PUBLIC_TOKEN_A_ADDRESS` | Token A address |
-| `NEXT_PUBLIC_TOKEN_B_ADDRESS` | Token B address |
+| `NEXT_PUBLIC_WETH_ADDRESS` | WETH token address |
+| `NEXT_PUBLIC_USDC_ADDRESS` | USDC token address |
+| `NEXT_PUBLIC_DAI_ADDRESS` | DAI token address |
+| `NEXT_PUBLIC_USDT_ADDRESS` | USDT token address |
 | `NEXT_PUBLIC_CHAIN_ID` | 11155111 (Sepolia) |
 | `NEXT_PUBLIC_CHAIN_NAME` | Sepolia |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |

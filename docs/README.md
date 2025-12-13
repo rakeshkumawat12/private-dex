@@ -57,6 +57,7 @@ VΛULT is a **permissioned Automated Market Maker (AMM)** DEX that implements a 
 4. **LP Tokens** - ERC20 tokens representing pool shares
 5. **Emergency Controls** - Pausable whitelist system
 6. **Admin Dashboard** - Manage whitelist requests
+7. **Token Faucet** - One-click test token minting for easy testing
 
 ---
 
@@ -91,13 +92,29 @@ VΛULT is a **permissioned Automated Market Maker (AMM)** DEX that implements a 
 
 ## Deployed Contracts (Sepolia Testnet)
 
-| Contract | Address |
-|----------|---------|
-| WhitelistManager | `0x3B0CD801d3F0f3F5C69905e7D3bfE225A994469F` |
-| Factory | `0x01DD4b85b88DE66d1d632a799944249da7c58B9A` |
-| Router | `0xc0aeB8bc024b95De284ADe61AF00c436181870d9` |
-| Token A (Test) | `0x0ae33C217fd0BE9D23d1596309095E816ac9e41a` |
-| Token B (Test) | `0x2EecA34C81d95d578D22A9102d40A8FF57C0AE5F` |
+| Contract | Address | Explorer |
+|----------|---------|----------|
+| WhitelistManager | `0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E` | [View on Blockscout](https://eth-sepolia.blockscout.com/address/0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E) |
+| Factory | `0xC36EE51C750F6290977D212FEE5C0Af95Fc3bC57` | [View on Blockscout](https://eth-sepolia.blockscout.com/address/0xC36EE51C750F6290977D212FEE5C0Af95Fc3bC57) |
+| Router | `0x05b6B7d9cE4BA0f12040664167b34382E050eC87` | [View on Blockscout](https://eth-sepolia.blockscout.com/address/0x05b6B7d9cE4BA0f12040664167b34382E050eC87) |
+
+### Test Tokens
+
+| Token | Address | Explorer |
+|-------|---------|----------|
+| WETH (Wrapped Ether) | `0x35287D9fDb7a1E7CC2212Fd1d57F8ae71cCA030A` | [View on Blockscout](https://eth-sepolia.blockscout.com/address/0x35287D9fDb7a1E7CC2212Fd1d57F8ae71cCA030A) |
+| USDC (USD Coin) | `0x01134D4D7A522a5d601413dD3Bf33859B193063e` | [View on Blockscout](https://eth-sepolia.blockscout.com/address/0x01134D4D7A522a5d601413dD3Bf33859B193063e) |
+| DAI (Dai Stablecoin) | `0x64c178393Bbe0cAe2a78A19c58e9B3944c2D5B42` | [View on Blockscout](https://eth-sepolia.blockscout.com/address/0x64c178393Bbe0cAe2a78A19c58e9B3944c2D5B42) |
+| USDT (Tether USD) | `0x5ccE1Fda0efe9A51302B3F26E3ca0d672536c2F7` | [View on Blockscout](https://eth-sepolia.blockscout.com/address/0x5ccE1Fda0efe9A51302B3F26E3ca0d672536c2F7) |
+
+### Active Liquidity Pools
+
+| Pool | Address | Initial Liquidity |
+|------|---------|------------------|
+| WETH/USDC | `0xcC885a0801eEA25E53daAD94008CF89B4299D208` | 100 WETH / 200,000 USDC |
+| WETH/DAI | `0xc6E56F5e6Af03535180f9ad416942a557DCFeEd2` | 50 WETH / 100,000 DAI |
+| USDC/USDT | `0xf2cb6319FC611447A4A37091877658DbEf121c29` | 100,000 USDC / 100,000 USDT |
+| DAI/USDT | `0xD21800b9587c761De6C07342c1f9E3f7ebb8cd90` | 100,000 DAI / 100,000 USDT |
 
 ---
 
@@ -122,6 +139,7 @@ private-dex/
     │   ├── admin/            # Admin dashboard
     │   ├── swap/             # Token swap
     │   ├── liquidity/        # Liquidity management
+    │   ├── faucet/           # Token faucet
     │   ├── whitelist/        # Request access
     │   └── stats/            # Analytics
     ├── components/           # React components
