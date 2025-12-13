@@ -4,7 +4,6 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../libraries/Math.sol";
-import "../interfaces/IWhitelistManager.sol";
 import "../interfaces/IPair.sol";
 
 /**
@@ -21,7 +20,6 @@ contract Pair is ERC20, ReentrancyGuard, IPair {
     address public immutable factory;
     address public token0;
     address public token1;
-    address public whitelistManager;
 
     uint112 private reserve0;
     uint112 private reserve1;
@@ -39,14 +37,6 @@ contract Pair is ERC20, ReentrancyGuard, IPair {
     );
     event Sync(uint112 reserve0, uint112 reserve1);
 
-    modifier onlyWhitelisted() {
-        require(
-            IWhitelistManager(whitelistManager).isWhitelistedAndActive(msg.sender),
-            "Pair: not whitelisted"
-        );
-        _;
-    }
-
     /**
      * @notice Constructor initializes the pair
      * @dev Called by Factory when creating a new pair
@@ -60,19 +50,16 @@ contract Pair is ERC20, ReentrancyGuard, IPair {
      * @dev Can only be called once by factory
      * @param _token0 Address of first token
      * @param _token1 Address of second token
-     * @param _whitelistManager Address of whitelist manager
      */
     function initialize(
         address _token0,
-        address _token1,
-        address _whitelistManager
+        address _token1
     ) external {
         require(msg.sender == factory, "Pair: forbidden");
         require(token0 == address(0), "Pair: already initialized");
 
         token0 = _token0;
         token1 = _token1;
-        whitelistManager = _whitelistManager;
     }
 
     /**
@@ -112,7 +99,7 @@ contract Pair is ERC20, ReentrancyGuard, IPair {
      * @param to Address to receive LP tokens
      * @return liquidity Amount of LP tokens minted
      */
-    function mint(address to) external nonReentrant onlyWhitelisted returns (uint256 liquidity) {
+    function mint(address to) external nonReentrant returns (uint256 liquidity) {
         (uint112 _reserve0, uint112 _reserve1, ) = getReserves();
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
@@ -150,7 +137,6 @@ contract Pair is ERC20, ReentrancyGuard, IPair {
     function burn(address to)
         external
         nonReentrant
-        onlyWhitelisted
         returns (uint256 amount0, uint256 amount1)
     {
         (uint112 _reserve0, uint112 _reserve1, ) = getReserves();
@@ -189,7 +175,7 @@ contract Pair is ERC20, ReentrancyGuard, IPair {
         uint256 amount0Out,
         uint256 amount1Out,
         address to
-    ) external nonReentrant onlyWhitelisted {
+    ) external nonReentrant {
         require(amount0Out > 0 || amount1Out > 0, "Pair: insufficient output amount");
         (uint112 _reserve0, uint112 _reserve1, ) = getReserves();
         require(amount0Out < _reserve0 && amount1Out < _reserve1, "Pair: insufficient liquidity");

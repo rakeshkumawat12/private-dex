@@ -2,15 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowDownUp, Settings, AlertCircle, Zap, ChevronDown, ShieldAlert, Loader2 } from "lucide-react";
+import { ArrowDownUp, Settings, AlertCircle, Zap, ChevronDown } from "lucide-react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/useToast";
 import { ROUTER_ADDRESS, ROUTER_ABI, ERC20_ABI } from "@/lib/contracts";
-import { useWhitelistProtection } from "@/hooks/useWhitelist";
-import Link from "next/link";
 
 const MOCK_TOKENS = [
   { address: "0x35287D9fDb7a1E7CC2212Fd1d57F8ae71cCA030A", symbol: "WETH", name: "Wrapped Ether", decimals: 18 },
@@ -22,7 +20,6 @@ const MOCK_TOKENS = [
 export default function SwapPage() {
   const { address, isConnected } = useAccount();
   const { toast } = useToast();
-  const { isWhitelisted, isCheckingWhitelist } = useWhitelistProtection(true);
 
   const [fromToken, setFromToken] = useState(MOCK_TOKENS[0]);
   const [toToken, setToToken] = useState(MOCK_TOKENS[1]);
@@ -30,9 +27,10 @@ export default function SwapPage() {
   const [toAmount, setToAmount] = useState("");
   const [slippage, setSlippage] = useState("0.5");
   const [showSettings, setShowSettings] = useState(false);
+  const [approvingToken, setApprovingToken] = useState(false);
 
-  const { writeContract, data: hash, isPending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess, isError: txError } = useWaitForTransactionReceipt({ hash });
 
   const { data: fromBalance } = useReadContract({
     address: fromToken.address as `0x${string}`,
@@ -55,17 +53,149 @@ export default function SwapPage() {
     args: address ? [address, ROUTER_ADDRESS] : undefined,
   });
 
+  // Get pair address from factory
+  const { data: pairAddress } = useReadContract({
+    address: process.env.NEXT_PUBLIC_FACTORY_ADDRESS as `0x${string}`,
+    abi: [
+      {
+        inputs: [
+          { internalType: "address", name: "tokenA", type: "address" },
+          { internalType: "address", name: "tokenB", type: "address" }
+        ],
+        name: "getPair",
+        outputs: [{ internalType: "address", name: "pair", type: "address" }],
+        stateMutability: "view",
+        type: "function"
+      }
+    ] as const,
+    functionName: "getPair",
+    args: [fromToken.address as `0x${string}`, toToken.address as `0x${string}`],
+  });
+
+  // Get reserves from pair
+  const { data: reserves } = useReadContract({
+    address: pairAddress && pairAddress !== "0x0000000000000000000000000000000000000000"
+      ? pairAddress
+      : undefined,
+    abi: [
+      {
+        inputs: [],
+        name: "getReserves",
+        outputs: [
+          { internalType: "uint112", name: "reserve0", type: "uint112" },
+          { internalType: "uint112", name: "reserve1", type: "uint112" },
+          { internalType: "uint32", name: "blockTimestampLast", type: "uint32" }
+        ],
+        stateMutability: "view",
+        type: "function"
+      },
+      {
+        inputs: [],
+        name: "token0",
+        outputs: [{ internalType: "address", name: "", type: "address" }],
+        stateMutability: "view",
+        type: "function"
+      }
+    ] as const,
+    functionName: "getReserves",
+  });
+
+  // Get token0 address to determine reserve order
+  const { data: token0Address } = useReadContract({
+    address: pairAddress && pairAddress !== "0x0000000000000000000000000000000000000000"
+      ? pairAddress
+      : undefined,
+    abi: [
+      {
+        inputs: [],
+        name: "token0",
+        outputs: [{ internalType: "address", name: "", type: "address" }],
+        stateMutability: "view",
+        type: "function"
+      }
+    ] as const,
+    functionName: "token0",
+  });
+
+  // Calculate output amount
   useEffect(() => {
-    if (isSuccess) {
-      toast({
-        title: "SWAP_EXECUTED",
-        description: `${fromAmount} ${fromToken.symbol} → ${toAmount} ${toToken.symbol}`,
-        variant: "success",
-      });
-      setFromAmount("");
+    if (!fromAmount || parseFloat(fromAmount) === 0) {
+      setToAmount("");
+      return;
+    }
+
+    if (reserves && token0Address && fromAmount) {
+      try {
+        const amountIn = parseUnits(fromAmount, fromToken.decimals);
+        const [reserve0, reserve1] = reserves;
+
+        // Determine which reserve is which based on token0
+        const isToken0 = fromToken.address.toLowerCase() === token0Address.toLowerCase();
+        const reserveIn = isToken0 ? reserve0 : reserve1;
+        const reserveOut = isToken0 ? reserve1 : reserve0;
+
+        // Calculate output using AMM formula: (amountIn * 997 * reserveOut) / (reserveIn * 1000 + amountIn * 997)
+        const amountInWithFee = amountIn * BigInt(997);
+        const numerator = amountInWithFee * BigInt(reserveOut);
+        const denominator = BigInt(reserveIn) * BigInt(1000) + amountInWithFee;
+        const amountOut = numerator / denominator;
+
+        setToAmount(formatUnits(amountOut, toToken.decimals));
+      } catch (error) {
+        console.error("Error calculating output:", error);
+        setToAmount("");
+      }
+    } else {
       setToAmount("");
     }
-  }, [isSuccess]);
+  }, [fromAmount, reserves, token0Address, fromToken, toToken]);
+
+  useEffect(() => {
+    if (isSuccess && hash) {
+      if (approvingToken) {
+        // Approval completed, auto-trigger swap
+        setApprovingToken(false);
+        toast({
+          title: "✅ TOKEN_APPROVED",
+          description: `${fromToken.symbol} approved! Executing swap...`,
+          variant: "success",
+        });
+        setTimeout(() => handleApproveAndSwap(), 1000);
+      } else {
+        // Swap completed
+        toast({
+          title: "✅ SWAP_EXECUTED",
+          description: `${fromAmount} ${fromToken.symbol} → ${toAmount} ${toToken.symbol}`,
+          variant: "success",
+        });
+        setFromAmount("");
+        setToAmount("");
+        setApprovingToken(false);
+      }
+    }
+  }, [isSuccess, hash, fromAmount, toAmount, fromToken.symbol, toToken.symbol, toast, approvingToken]);
+
+  useEffect(() => {
+    if (txError) {
+      toast({
+        title: "❌ SWAP_FAILED",
+        description: "Transaction failed. Please check your wallet and try again.",
+        variant: "error",
+      });
+      setApprovingToken(false);
+    }
+  }, [txError, toast]);
+
+  useEffect(() => {
+    if (writeError) {
+      toast({
+        title: "❌ TRANSACTION_REJECTED",
+        description: writeError.message || "User rejected the transaction",
+        variant: "error",
+      });
+      setApprovingToken(false);
+    }
+  }, [writeError, toast]);
 
   const handleSwapTokens = () => {
     const temp = fromToken;
@@ -75,27 +205,92 @@ export default function SwapPage() {
     setToAmount(fromAmount);
   };
 
+  const handleApproveAndSwap = async () => {
+    if (!fromAmount || !toAmount || !isConnected || isPending || isConfirming) return;
+
+    try {
+      // Step 1: Approve token if needed (and not already approving)
+      if (needsApproval && !approvingToken) {
+        setApprovingToken(true);
+        // Approve max amount to avoid repeated approvals
+        const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+        writeContract({
+          address: fromToken.address as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [ROUTER_ADDRESS, maxApproval],
+          gas: BigInt(100000),
+        });
+
+        toast({
+          title: "⏳ STEP 1/2",
+          description: `Approving ${fromToken.symbol}...`,
+        });
+        return;
+      }
+
+      // Step 2: Execute swap (only if not currently approving)
+      if (!approvingToken) {
+        const amountIn = parseUnits(fromAmount, fromToken.decimals);
+        const amountOutMin = parseUnits(
+          (parseFloat(toAmount) * (1 - parseFloat(slippage) / 100)).toString(),
+          toToken.decimals
+        );
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+        writeContract({
+          address: ROUTER_ADDRESS,
+          abi: ROUTER_ABI,
+          functionName: "swapExactTokensForTokens",
+          args: [
+            amountIn,
+            amountOutMin,
+            [fromToken.address as `0x${string}`, toToken.address as `0x${string}`],
+            address as `0x${string}`,
+            deadline,
+          ],
+          gas: BigInt(300000),
+        });
+
+        toast({
+          title: "⏳ STEP 2/2",
+          description: `Swapping ${fromAmount} ${fromToken.symbol} for ${toToken.symbol}...`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "❌ TRANSACTION_FAILED",
+        description: error.message || "Failed to execute swap",
+        variant: "error",
+      });
+      setApprovingToken(false);
+    }
+  };
+
   const handleApprove = async () => {
     if (!fromAmount || !isConnected) return;
 
     try {
-      const amount = parseUnits(fromAmount, fromToken.decimals);
+      // Approve max amount to avoid repeated approvals
+      const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
 
       writeContract({
         address: fromToken.address as `0x${string}`,
         abi: ERC20_ABI,
         functionName: "approve",
-        args: [ROUTER_ADDRESS, amount],
+        args: [ROUTER_ADDRESS, maxApproval],
+        gas: BigInt(100000),
       });
 
       toast({
-        title: "APPROVAL_PENDING",
-        description: "Awaiting confirmation...",
+        title: "⏳ APPROVAL_PENDING",
+        description: `Approving ${fromToken.symbol}...`,
       });
     } catch (error: any) {
       toast({
-        title: "APPROVAL_FAILED",
-        description: error.message,
+        title: "❌ APPROVAL_FAILED",
+        description: error.message || "Failed to approve token",
         variant: "error",
       });
     }
@@ -123,16 +318,17 @@ export default function SwapPage() {
           address as `0x${string}`,
           deadline,
         ],
+        gas: BigInt(300000),
       });
 
       toast({
-        title: "SWAP_PENDING",
-        description: "Awaiting confirmation...",
+        title: "⏳ SWAP_PENDING",
+        description: `Swapping ${fromAmount} ${fromToken.symbol} for ${toToken.symbol}...`,
       });
     } catch (error: any) {
       toast({
-        title: "SWAP_FAILED",
-        description: error.message,
+        title: "❌ SWAP_FAILED",
+        description: error.message || "Failed to execute swap",
         variant: "error",
       });
     }
@@ -141,62 +337,6 @@ export default function SwapPage() {
   const needsApproval = allowance !== undefined && fromAmount
     ? allowance < parseUnits(fromAmount, fromToken.decimals)
     : true;
-
-  // Show loading state while checking whitelist
-  if (isCheckingWhitelist) {
-    return (
-      <div className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 mx-auto animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">VERIFYING_WHITELIST_STATUS...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show not whitelisted message
-  if (isConnected && !isWhitelisted) {
-    return (
-      <div className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute top-1/4 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-destructive/5 blur-[100px]" />
-          <div className="grid-pattern absolute inset-0 opacity-20" />
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="container relative mx-auto px-4 max-w-md"
-        >
-          <div className="terminal-card rounded-lg p-8 text-center space-y-6">
-            <div className="flex justify-center">
-              <div className="p-4 rounded-full bg-destructive/10 border border-destructive/20">
-                <ShieldAlert className="h-8 w-8 text-destructive" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-xl font-bold text-destructive">ACCESS_DENIED</h2>
-              <p className="text-sm text-muted-foreground">
-                Your wallet address is not whitelisted for this protocol.
-              </p>
-            </div>
-
-            <div className="pt-4 space-y-3">
-              <Link href="/whitelist">
-                <Button variant="glow" size="lg" className="w-full">
-                  REQUEST_WHITELIST_ACCESS
-                </Button>
-              </Link>
-              <p className="text-xs text-muted-foreground">
-                // Submit a request to gain access to swap and liquidity features
-              </p>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)]">
@@ -364,8 +504,8 @@ export default function SwapPage() {
                     type="number"
                     placeholder="0.00"
                     value={toAmount}
-                    onChange={(e) => setToAmount(e.target.value)}
-                    className="flex-1 text-right text-xl font-bold bg-transparent border-0 focus:ring-0 p-0"
+                    readOnly
+                    className="flex-1 text-right text-xl font-bold bg-transparent border-0 focus:ring-0 p-0 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -402,38 +542,21 @@ export default function SwapPage() {
                   <Button className="w-full" size="lg" disabled>
                     CONNECT_WALLET_REQUIRED
                   </Button>
-                ) : needsApproval && fromAmount ? (
-                  <Button
-                    className="w-full"
-                    size="lg"
-                    variant="outline"
-                    onClick={handleApprove}
-                    disabled={isPending || isConfirming}
-                  >
-                    {isPending || isConfirming ? (
-                      <span className="flex items-center gap-2">
-                        <span className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
-                        APPROVING...
-                      </span>
-                    ) : (
-                      `APPROVE_${fromToken.symbol}`
-                    )}
-                  </Button>
                 ) : (
                   <Button
                     className="w-full"
                     size="lg"
                     variant="glow"
-                    onClick={handleSwap}
+                    onClick={handleApproveAndSwap}
                     disabled={!fromAmount || !toAmount || isPending || isConfirming}
                   >
                     {isPending || isConfirming ? (
                       <span className="flex items-center gap-2">
                         <span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                        EXECUTING...
+                        {approvingToken ? `STEP 1/2: APPROVING ${fromToken.symbol}...` : "STEP 2/2: EXECUTING SWAP..."}
                       </span>
                     ) : (
-                      "EXECUTE_SWAP"
+                      needsApproval ? `APPROVE & SWAP` : "EXECUTE_SWAP"
                     )}
                   </Button>
                 )}

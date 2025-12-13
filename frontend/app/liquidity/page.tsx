@@ -2,15 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, Minus, AlertCircle, Droplets, ChevronDown, Layers, ShieldAlert, Loader2 } from "lucide-react";
+import { Plus, Minus, AlertCircle, Droplets, ChevronDown, Layers } from "lucide-react";
 import { useAccount, useReadContract, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/useToast";
 import { ROUTER_ADDRESS, ROUTER_ABI, ERC20_ABI, FACTORY_ABI, PAIR_ABI, FACTORY_ADDRESS } from "@/lib/contracts";
-import { useWhitelistProtection } from "@/hooks/useWhitelist";
-import Link from "next/link";
 
 const MOCK_TOKENS = [
   { address: "0x35287D9fDb7a1E7CC2212Fd1d57F8ae71cCA030A", symbol: "WETH", name: "Wrapped Ether", decimals: 18 },
@@ -22,7 +20,6 @@ const MOCK_TOKENS = [
 export default function LiquidityPage() {
   const { address, isConnected } = useAccount();
   const { toast } = useToast();
-  const { isWhitelisted, isCheckingWhitelist } = useWhitelistProtection(true);
 
   const [mode, setMode] = useState<"add" | "remove">("add");
   const [tokenA, setTokenA] = useState(MOCK_TOKENS[0]);
@@ -30,9 +27,12 @@ export default function LiquidityPage() {
   const [amountA, setAmountA] = useState("");
   const [amountB, setAmountB] = useState("");
   const [lpAmount, setLpAmount] = useState("");
+  const [approvingTokenA, setApprovingTokenA] = useState(false);
+  const [approvingTokenB, setApprovingTokenB] = useState(false);
+  const [approvingLP, setApprovingLP] = useState(false);
 
-  const { writeContract, data: hash, isPending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({ hash });
+  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess, isError: txError } = useWaitForTransactionReceipt({ hash });
 
   const { data: pairAddress } = useReadContract({
     address: FACTORY_ADDRESS,
@@ -60,20 +60,384 @@ export default function LiquidityPage() {
     },
   });
 
+  const { data: token0Address } = useReadContract({
+    address: pairAddress as `0x${string}`,
+    abi: PAIR_ABI,
+    functionName: "token0",
+    query: {
+      enabled: !!pairAddress && pairAddress !== "0x0000000000000000000000000000000000000000",
+    },
+  });
+
+  // Check allowances for both tokens
+  const { data: allowanceA } = useReadContract({
+    address: tokenA.address as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: address ? [address, ROUTER_ADDRESS] : undefined,
+    query: {
+      enabled: !!address,
+    },
+  });
+
+  const { data: allowanceB } = useReadContract({
+    address: tokenB.address as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: address ? [address, ROUTER_ADDRESS] : undefined,
+    query: {
+      enabled: !!address,
+    },
+  });
+
+  // Check LP token allowance for removing liquidity
+  const { data: lpAllowance } = useReadContract({
+    address: pairAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: address ? [address, ROUTER_ADDRESS] : undefined,
+    query: {
+      enabled: !!address && !!pairAddress && pairAddress !== "0x0000000000000000000000000000000000000000",
+    },
+  });
+
+  // Check if approvals are needed (defined before useEffect hooks)
+  const needsApprovalA = allowanceA !== undefined && amountA
+    ? allowanceA < parseUnits(amountA, tokenA.decimals)
+    : true;
+
+  const needsApprovalB = allowanceB !== undefined && amountB
+    ? allowanceB < parseUnits(amountB, tokenB.decimals)
+    : true;
+
+  const needsLPApproval = lpAllowance !== undefined && lpAmount && parseFloat(lpAmount) > 0
+    ? lpAllowance < parseUnits(lpAmount, 18)
+    : false;
+
+  // Auto-calculate amountB based on pool ratio when amountA changes
   useEffect(() => {
-    if (isSuccess) {
-      toast({
-        title: mode === "add" ? "LIQUIDITY_ADDED" : "LIQUIDITY_REMOVED",
-        description: mode === "add"
-          ? `${amountA} ${tokenA.symbol} + ${amountB} ${tokenB.symbol}`
-          : `Withdrawn from ${tokenA.symbol}/${tokenB.symbol} pool`,
-        variant: "success",
-      });
-      setAmountA("");
-      setAmountB("");
-      setLpAmount("");
+    if (mode === "add" && reserves && token0Address && amountA && parseFloat(amountA) > 0) {
+      try {
+        const [reserve0, reserve1] = reserves;
+
+        // Skip if pool is empty (no reserves)
+        if (reserve0 === BigInt(0) || reserve1 === BigInt(0)) {
+          return;
+        }
+
+        const isToken0 = tokenA.address.toLowerCase() === token0Address.toLowerCase();
+        const reserveA = isToken0 ? reserve0 : reserve1;
+        const reserveB = isToken0 ? reserve1 : reserve0;
+
+        // Calculate optimal amountB: amountB = (amountA * reserveB) / reserveA
+        const amountABigInt = parseUnits(amountA, tokenA.decimals);
+        const optimalAmountB = (amountABigInt * reserveB) / reserveA;
+
+        setAmountB(formatUnits(optimalAmountB, tokenB.decimals));
+      } catch (error) {
+        console.error("Error calculating optimal amount:", error);
+      }
     }
-  }, [isSuccess]);
+  }, [amountA, reserves, token0Address, tokenA, tokenB, mode]);
+
+  // Show success toast for transactions and auto-continue to next step
+  useEffect(() => {
+    if (isSuccess && hash) {
+      // Determine what transaction completed based on current state flags
+      if (mode === "add") {
+        if (approvingTokenA) {
+          // Token A approval completed
+          setApprovingTokenA(false);
+          toast({
+            title: "✅ STEP 1/3 COMPLETE",
+            description: `${tokenA.symbol} approved! Continuing...`,
+            variant: "success",
+          });
+          // Auto-trigger next step after a short delay
+          setTimeout(() => handleApproveAndAdd(), 1000);
+        } else if (approvingTokenB) {
+          // Token B approval completed
+          setApprovingTokenB(false);
+          toast({
+            title: "✅ STEP 2/3 COMPLETE",
+            description: `${tokenB.symbol} approved! Continuing...`,
+            variant: "success",
+          });
+          // Auto-trigger next step after a short delay
+          setTimeout(() => handleApproveAndAdd(), 1000);
+        } else {
+          // Add liquidity transaction completed
+          toast({
+            title: "✅ LIQUIDITY_ADDED",
+            description: `Successfully added ${amountA} ${tokenA.symbol} + ${amountB} ${tokenB.symbol}`,
+            variant: "success",
+          });
+          setAmountA("");
+          setAmountB("");
+          setApprovingTokenA(false);
+          setApprovingTokenB(false);
+        }
+      } else if (mode === "remove") {
+        if (approvingLP) {
+          // LP approval completed, auto-trigger remove liquidity
+          setApprovingLP(false);
+          toast({
+            title: "✅ LP_TOKENS_APPROVED",
+            description: "LP tokens approved! Removing liquidity...",
+            variant: "success",
+          });
+          setTimeout(() => handleApproveAndRemove(), 1000);
+        } else {
+          // Remove liquidity transaction completed
+          toast({
+            title: "✅ LIQUIDITY_REMOVED",
+            description: `Successfully removed liquidity`,
+            variant: "success",
+          });
+          setLpAmount("");
+          setApprovingLP(false);
+        }
+      }
+    }
+  }, [isSuccess, hash, mode, amountA, tokenA.symbol, amountB, tokenB.symbol, toast, approvingTokenA, approvingTokenB, approvingLP]);
+
+  // Show error toast for transaction failures
+  useEffect(() => {
+    if (txError) {
+      toast({
+        title: "❌ TRANSACTION_FAILED",
+        description: "Transaction failed. Please check your wallet and try again.",
+        variant: "error",
+      });
+      // Reset all approving flags on error
+      setApprovingTokenA(false);
+      setApprovingTokenB(false);
+      setApprovingLP(false);
+    }
+  }, [txError, toast]);
+
+  // Show error toast for rejected transactions
+  useEffect(() => {
+    if (writeError) {
+      toast({
+        title: "❌ TRANSACTION_REJECTED",
+        description: writeError.message || "User rejected the transaction",
+        variant: "error",
+      });
+      // Reset all approving flags on rejection
+      setApprovingTokenA(false);
+      setApprovingTokenB(false);
+      setApprovingLP(false);
+    }
+  }, [writeError, toast]);
+
+  const handleApproveAndAdd = async () => {
+    if (!amountA || !amountB || !isConnected || isPending || isConfirming) return;
+
+    try {
+      // Step 1: Approve Token A if needed (and not already approving)
+      if (needsApprovalA && !approvingTokenA && !approvingTokenB) {
+        setApprovingTokenA(true);
+        // Approve max amount to avoid repeated approvals
+        const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+        writeContract({
+          address: tokenA.address as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [ROUTER_ADDRESS, maxApproval],
+          gas: BigInt(100000),
+        });
+
+        toast({
+          title: "⏳ STEP 1/3",
+          description: `Approving ${tokenA.symbol}...`,
+        });
+        return;
+      }
+
+      // Step 2: Approve Token B if needed (and not already approving)
+      if (needsApprovalB && !approvingTokenA && !approvingTokenB) {
+        setApprovingTokenB(true);
+        // Approve max amount to avoid repeated approvals
+        const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+        writeContract({
+          address: tokenB.address as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [ROUTER_ADDRESS, maxApproval],
+          gas: BigInt(100000),
+        });
+
+        toast({
+          title: "⏳ STEP 2/3",
+          description: `Approving ${tokenB.symbol}...`,
+        });
+        return;
+      }
+
+      // Step 3: Add liquidity (only if not currently approving anything)
+      if (!approvingTokenA && !approvingTokenB) {
+        const amountADesired = parseUnits(amountA, tokenA.decimals);
+        const amountBDesired = parseUnits(amountB, tokenB.decimals);
+        const amountAMin = (amountADesired * BigInt(98)) / BigInt(100);
+        const amountBMin = (amountBDesired * BigInt(98)) / BigInt(100);
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+        writeContract({
+          address: ROUTER_ADDRESS,
+          abi: ROUTER_ABI,
+          functionName: "addLiquidity",
+          args: [
+            tokenA.address as `0x${string}`,
+            tokenB.address as `0x${string}`,
+            amountADesired,
+            amountBDesired,
+            amountAMin,
+            amountBMin,
+            address as `0x${string}`,
+            deadline,
+          ],
+          gas: BigInt(500000),
+        });
+
+        toast({
+          title: "⏳ STEP 3/3",
+          description: `Adding ${amountA} ${tokenA.symbol} + ${amountB} ${tokenB.symbol}...`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "❌ TRANSACTION_FAILED",
+        description: error.message || "Failed to process transaction",
+        variant: "error",
+      });
+      // Reset approving states on error
+      setApprovingTokenA(false);
+      setApprovingTokenB(false);
+    }
+  };
+
+  const handleApproveAndRemove = async () => {
+    if (!lpAmount || !isConnected || !pairAddress || isPending || isConfirming) return;
+
+    try {
+      // Step 1: Approve LP tokens if needed (and not already approving)
+      if (needsLPApproval && !approvingLP) {
+        setApprovingLP(true);
+        // Approve max amount to avoid repeated approvals
+        const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+        writeContract({
+          address: pairAddress as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [ROUTER_ADDRESS, maxApproval],
+          gas: BigInt(100000),
+        });
+
+        toast({
+          title: "⏳ STEP 1/2",
+          description: "Approving LP tokens...",
+        });
+        return;
+      }
+
+      // Step 2: Remove liquidity (only if not currently approving)
+      if (!approvingLP) {
+        const liquidity = parseUnits(lpAmount, 18);
+        const amountAMin = BigInt(0);
+        const amountBMin = BigInt(0);
+        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
+
+        writeContract({
+          address: ROUTER_ADDRESS,
+          abi: ROUTER_ABI,
+          functionName: "removeLiquidity",
+          args: [
+            tokenA.address as `0x${string}`,
+            tokenB.address as `0x${string}`,
+            liquidity,
+            amountAMin,
+            amountBMin,
+            address as `0x${string}`,
+            deadline,
+          ],
+          gas: BigInt(400000),
+        });
+
+        toast({
+          title: "⏳ STEP 2/2",
+          description: `Removing ${lpAmount} LP tokens...`,
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "❌ TRANSACTION_FAILED",
+        description: error.message || "Failed to remove liquidity",
+        variant: "error",
+      });
+      // Reset approving state on error
+      setApprovingLP(false);
+    }
+  };
+
+  const handleApproveA = async () => {
+    if (!amountA || !isConnected) return;
+
+    try {
+      // Approve max amount to avoid repeated approvals
+      const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+      writeContract({
+        address: tokenA.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [ROUTER_ADDRESS, maxApproval],
+        gas: BigInt(100000),
+      });
+
+      toast({
+        title: "⏳ APPROVAL_PENDING",
+        description: `Approving ${tokenA.symbol}...`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "❌ APPROVAL_FAILED",
+        description: error.message || "Failed to approve token",
+        variant: "error",
+      });
+    }
+  };
+
+  const handleApproveB = async () => {
+    if (!amountB || !isConnected) return;
+
+    try {
+      // Approve max amount to avoid repeated approvals
+      const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+      writeContract({
+        address: tokenB.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [ROUTER_ADDRESS, maxApproval],
+        gas: BigInt(100000),
+      });
+
+      toast({
+        title: "⏳ APPROVAL_PENDING",
+        description: `Approving ${tokenB.symbol}...`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "❌ APPROVAL_FAILED",
+        description: error.message || "Failed to approve token",
+        variant: "error",
+      });
+    }
+  };
 
   const handleAddLiquidity = async () => {
     if (!amountA || !amountB || !isConnected) return;
@@ -81,8 +445,9 @@ export default function LiquidityPage() {
     try {
       const amountADesired = parseUnits(amountA, tokenA.decimals);
       const amountBDesired = parseUnits(amountB, tokenB.decimals);
-      const amountAMin = (amountADesired * BigInt(95)) / BigInt(100);
-      const amountBMin = (amountBDesired * BigInt(95)) / BigInt(100);
+      // Allow 2% slippage (accept minimum of 98% of desired amounts)
+      const amountAMin = (amountADesired * BigInt(98)) / BigInt(100);
+      const amountBMin = (amountBDesired * BigInt(98)) / BigInt(100);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
       writeContract({
@@ -99,16 +464,45 @@ export default function LiquidityPage() {
           address as `0x${string}`,
           deadline,
         ],
+        gas: BigInt(500000),
       });
 
       toast({
-        title: "TX_PENDING",
-        description: "Adding liquidity...",
+        title: "⏳ TX_PENDING",
+        description: `Adding ${amountA} ${tokenA.symbol} + ${amountB} ${tokenB.symbol}...`,
       });
     } catch (error: any) {
       toast({
-        title: "TX_FAILED",
-        description: error.message,
+        title: "❌ TX_FAILED",
+        description: error.message || "Failed to add liquidity",
+        variant: "error",
+      });
+    }
+  };
+
+  const handleApproveLPToken = async () => {
+    if (!lpAmount || !isConnected || !pairAddress) return;
+
+    try {
+      // Approve max amount to avoid repeated approvals
+      const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
+
+      writeContract({
+        address: pairAddress as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [ROUTER_ADDRESS, maxApproval],
+        gas: BigInt(100000),
+      });
+
+      toast({
+        title: "⏳ APPROVAL_PENDING",
+        description: "Approving LP tokens...",
+      });
+    } catch (error: any) {
+      toast({
+        title: "❌ APPROVAL_FAILED",
+        description: error.message || "Failed to approve LP tokens",
         variant: "error",
       });
     }
@@ -136,76 +530,21 @@ export default function LiquidityPage() {
           address as `0x${string}`,
           deadline,
         ],
+        gas: BigInt(400000),
       });
 
       toast({
-        title: "TX_PENDING",
-        description: "Removing liquidity...",
+        title: "⏳ TX_PENDING",
+        description: `Removing ${lpAmount} LP tokens...`,
       });
     } catch (error: any) {
       toast({
-        title: "TX_FAILED",
-        description: error.message,
+        title: "❌ TX_FAILED",
+        description: error.message || "Failed to remove liquidity",
         variant: "error",
       });
     }
   };
-
-  // Show loading state while checking whitelist
-  if (isCheckingWhitelist) {
-    return (
-      <div className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <Loader2 className="h-8 w-8 mx-auto animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">VERIFYING_WHITELIST_STATUS...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Show not whitelisted message
-  if (isConnected && !isWhitelisted) {
-    return (
-      <div className="relative min-h-[calc(100vh-8rem)] flex items-center justify-center">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden">
-          <div className="absolute top-1/4 left-1/2 h-[500px] w-[500px] -translate-x-1/2 rounded-full bg-destructive/5 blur-[100px]" />
-          <div className="grid-pattern absolute inset-0 opacity-20" />
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="container relative mx-auto px-4 max-w-md"
-        >
-          <div className="terminal-card rounded-lg p-8 text-center space-y-6">
-            <div className="flex justify-center">
-              <div className="p-4 rounded-full bg-destructive/10 border border-destructive/20">
-                <ShieldAlert className="h-8 w-8 text-destructive" />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-xl font-bold text-destructive">ACCESS_DENIED</h2>
-              <p className="text-sm text-muted-foreground">
-                Your wallet address is not whitelisted for this protocol.
-              </p>
-            </div>
-
-            <div className="pt-4 space-y-3">
-              <Link href="/whitelist">
-                <Button variant="glow" size="lg" className="w-full">
-                  REQUEST_WHITELIST_ACCESS
-                </Button>
-              </Link>
-              <p className="text-xs text-muted-foreground">
-                // Submit a request to gain access to swap and liquidity features
-              </p>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)]">
@@ -323,6 +662,9 @@ export default function LiquidityPage() {
                 <div className="rounded border border-border/50 bg-muted/30 p-4 space-y-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-muted-foreground">TOKEN_B</span>
+                    {reserves && reserves[0] !== BigInt(0) && reserves[1] !== BigInt(0) && (
+                      <span className="text-primary text-[10px]">AUTO_CALCULATED</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="relative">
@@ -347,13 +689,16 @@ export default function LiquidityPage() {
                       placeholder="0.00"
                       value={amountB}
                       onChange={(e) => setAmountB(e.target.value)}
-                      className="flex-1 text-right text-xl font-bold bg-transparent border-0 focus:ring-0 p-0"
+                      readOnly={!!(reserves && reserves[0] !== BigInt(0) && reserves[1] !== BigInt(0))}
+                      className={`flex-1 text-right text-xl font-bold bg-transparent border-0 focus:ring-0 p-0 ${
+                        reserves && reserves[0] !== BigInt(0) && reserves[1] !== BigInt(0) ? 'cursor-not-allowed' : ''
+                      }`}
                     />
                   </div>
                 </div>
 
                 {/* Pool Reserves */}
-                {reserves && (
+                {reserves && token0Address && (
                   <div className="rounded border border-primary/10 bg-primary/5 p-4 space-y-3">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Layers className="h-3.5 w-3.5" />
@@ -362,32 +707,57 @@ export default function LiquidityPage() {
                     <div className="grid grid-cols-2 gap-4 text-sm">
                       <div>
                         <span className="text-muted-foreground text-xs">{tokenA.symbol}</span>
-                        <p className="font-medium">{parseFloat(formatUnits(reserves[0], tokenA.decimals)).toFixed(4)}</p>
+                        <p className="font-medium">
+                          {parseFloat(
+                            formatUnits(
+                              tokenA.address.toLowerCase() === token0Address.toLowerCase() ? reserves[0] : reserves[1],
+                              tokenA.decimals
+                            )
+                          ).toFixed(4)}
+                        </p>
                       </div>
                       <div>
                         <span className="text-muted-foreground text-xs">{tokenB.symbol}</span>
-                        <p className="font-medium">{parseFloat(formatUnits(reserves[1], tokenB.decimals)).toFixed(4)}</p>
+                        <p className="font-medium">
+                          {parseFloat(
+                            formatUnits(
+                              tokenA.address.toLowerCase() === token0Address.toLowerCase() ? reserves[1] : reserves[0],
+                              tokenB.decimals
+                            )
+                          ).toFixed(4)}
+                        </p>
                       </div>
                     </div>
                   </div>
                 )}
 
-                <Button
-                  className="w-full"
-                  size="lg"
-                  variant="glow"
-                  onClick={handleAddLiquidity}
-                  disabled={!amountA || !amountB || !isConnected || isPending || isConfirming}
-                >
-                  {isPending || isConfirming ? (
-                    <span className="flex items-center gap-2">
-                      <span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                      ADDING_LIQUIDITY...
-                    </span>
-                  ) : (
-                    "ADD_LIQUIDITY"
-                  )}
-                </Button>
+                {/* Single Add Liquidity Button */}
+                {!isConnected ? (
+                  <Button className="w-full" size="lg" disabled>
+                    CONNECT_WALLET_REQUIRED
+                  </Button>
+                ) : (
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    variant="glow"
+                    onClick={handleApproveAndAdd}
+                    disabled={!amountA || !amountB || !isConnected || isPending || isConfirming}
+                  >
+                    {isPending || isConfirming ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
+                        {approvingTokenA ? `STEP 1/3: APPROVING ${tokenA.symbol}...` :
+                         approvingTokenB ? `STEP 2/3: APPROVING ${tokenB.symbol}...` :
+                         "STEP 3/3: ADDING LIQUIDITY..."}
+                      </span>
+                    ) : (
+                      needsApprovalA || needsApprovalB
+                        ? `APPROVE & ADD LIQUIDITY`
+                        : "ADD_LIQUIDITY"
+                    )}
+                  </Button>
+                )}
               </div>
             ) : (
               <div className="p-4 space-y-4">
@@ -421,22 +791,28 @@ export default function LiquidityPage() {
                   </p>
                 </div>
 
-                <Button
-                  className="w-full"
-                  size="lg"
-                  variant="destructive"
-                  onClick={handleRemoveLiquidity}
-                  disabled={!lpAmount || !isConnected || isPending || isConfirming}
-                >
-                  {isPending || isConfirming ? (
-                    <span className="flex items-center gap-2">
-                      <span className="h-4 w-4 rounded-full border-2 border-destructive-foreground border-t-transparent animate-spin" />
-                      REMOVING...
-                    </span>
-                  ) : (
-                    "REMOVE_LIQUIDITY"
-                  )}
-                </Button>
+                {!isConnected ? (
+                  <Button className="w-full" size="lg" disabled>
+                    CONNECT_WALLET_REQUIRED
+                  </Button>
+                ) : (
+                  <Button
+                    className="w-full"
+                    size="lg"
+                    variant="destructive"
+                    onClick={handleApproveAndRemove}
+                    disabled={!lpAmount || !isConnected || isPending || isConfirming}
+                  >
+                    {isPending || isConfirming ? (
+                      <span className="flex items-center gap-2">
+                        <span className="h-4 w-4 rounded-full border-2 border-destructive-foreground border-t-transparent animate-spin" />
+                        {approvingLP ? "STEP 1/2: APPROVING LP TOKENS..." : "STEP 2/2: REMOVING LIQUIDITY..."}
+                      </span>
+                    ) : (
+                      needsLPApproval ? "APPROVE & REMOVE LIQUIDITY" : "REMOVE_LIQUIDITY"
+                    )}
+                  </Button>
+                )}
               </div>
             )}
           </div>

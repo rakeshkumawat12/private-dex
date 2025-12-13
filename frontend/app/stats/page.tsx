@@ -102,16 +102,31 @@ function PoolCard({
     },
   });
 
-  if (!reserves || !totalSupply) {
+  const { data: token0Address } = useReadContract({
+    address: pairAddress as `0x${string}`,
+    abi: PAIR_ABI,
+    functionName: "token0",
+    query: {
+      enabled: pairAddress !== "0x0000000000000000000000000000000000000000",
+    },
+  });
+
+  if (!reserves || !totalSupply || !token0Address) {
     return null;
   }
 
-  const reserve0 = formatUnits(reserves[0], tokenA.decimals);
-  const reserve1 = formatUnits(reserves[1], tokenB.decimals);
+  // Determine which token is token0 and which is token1
+  const isTokenAToken0 = tokenA.address.toLowerCase() === token0Address.toLowerCase();
+
+  const reserveA = isTokenAToken0 ? reserves[0] : reserves[1];
+  const reserveB = isTokenAToken0 ? reserves[1] : reserves[0];
+
+  const reserve0 = formatUnits(reserveA, tokenA.decimals);
+  const reserve1 = formatUnits(reserveB, tokenB.decimals);
   const price = parseFloat(reserve1) / parseFloat(reserve0);
 
   return (
-    <motion.div variants={itemVariants} whileHover={{ scale: 1.02 }} className="group">
+    <div className="group">
       <div className="terminal-card rounded-lg overflow-hidden transition-all">
         {/* Pool Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-primary/10 bg-primary/5">
@@ -151,17 +166,19 @@ function PoolCard({
               </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">LP_SUPPLY</span>
-              <span className="font-medium">{parseFloat(formatUnits(totalSupply, 18)).toFixed(4)}</span>
+              <span className="text-muted-foreground">LP_TOKENS</span>
+              <span className="font-medium">{parseFloat(formatUnits(totalSupply, 18)).toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">TVL</span>
-              <span className="font-medium text-primary">~$12,450</span>
+              <span className="text-muted-foreground">POOL_SHARE</span>
+              <span className="font-medium text-primary">
+                {parseFloat(reserve0).toFixed(2)} {tokenA.symbol} + {parseFloat(reserve1).toFixed(2)} {tokenB.symbol}
+              </span>
             </div>
           </div>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -248,34 +265,25 @@ export default function StatsPage() {
                 <span className="text-xs text-muted-foreground">vault stats --overview</span>
                 <span className="cursor-blink text-xs">_</span>
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-primary/10">
-                <StatCard
-                  title="TOTAL_VALUE_LOCKED"
-                  value="$2.4M"
-                  description="Across all pools"
-                  icon={DollarSign}
-                  trend="+12.5%"
-                />
-                <StatCard
-                  title="24H_VOLUME"
-                  value="$156K"
-                  description="Trading volume"
-                  icon={Activity}
-                  trend="+8.3%"
-                  color="accent"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4">
                 <StatCard
                   title="ACTIVE_POOLS"
                   value={allPairsLength ? allPairsLength.toString() : "0"}
-                  description="Trading pairs"
+                  description="Liquidity pools"
                   icon={Layers}
                 />
                 <StatCard
-                  title="WHITELISTED"
-                  value="342"
-                  description="Active traders"
+                  title="TOTAL_POOLS"
+                  value={validPools.length.toString()}
+                  description="With liquidity"
+                  icon={Activity}
+                  color="accent"
+                />
+                <StatCard
+                  title="ACCESS_TYPE"
+                  value="PRIVATE"
+                  description="Whitelist required"
                   icon={Users}
-                  trend="+5.2%"
                   color="accent"
                 />
               </div>
@@ -283,7 +291,7 @@ export default function StatsPage() {
           </motion.div>
 
           {/* Active Pools Section */}
-          <motion.div variants={itemVariants} className="space-y-4">
+          <div className="space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-bold">ACTIVE_POOLS</h2>
@@ -309,7 +317,7 @@ export default function StatsPage() {
             </div>
 
             {validPools.length === 0 && (
-              <motion.div variants={itemVariants}>
+              <div>
                 <div className="terminal-card rounded-lg overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2 border-b border-primary/10 bg-primary/5">
                     <span className="text-xs text-muted-foreground">system_message</span>
@@ -328,9 +336,9 @@ export default function StatsPage() {
                     </div>
                   </div>
                 </div>
-              </motion.div>
+              </div>
             )}
-          </motion.div>
+          </div>
 
           {/* Documentation Section */}
           <motion.div variants={itemVariants}>
@@ -341,31 +349,31 @@ export default function StatsPage() {
               <div className="p-6 space-y-6">
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-2">
-                    <h4 className="text-sm font-bold text-primary">TOTAL_VALUE_LOCKED</h4>
+                    <h4 className="text-sm font-bold text-primary">ACTIVE_POOLS</h4>
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Aggregate value of all tokens deposited across protocol pools.
-                      Indicates overall liquidity available for trading operations.
+                      Total number of liquidity pools created via the Factory contract.
+                      Each pool represents a unique token pair for trading.
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <h4 className="text-sm font-bold text-accent">TRADING_VOLUME</h4>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      Total value of executed swaps in 24h window. Higher volume
-                      correlates with increased fee generation for LPs.
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-bold text-primary">POOL_RESERVES</h4>
+                    <h4 className="text-sm font-bold text-accent">POOL_RESERVES</h4>
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Token quantities held in pool smart contract. Used for
                       price computation via constant product formula (x * y = k).
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <h4 className="text-sm font-bold text-accent">LP_TOKENS</h4>
+                    <h4 className="text-sm font-bold text-primary">LP_TOKENS</h4>
                     <p className="text-xs text-muted-foreground leading-relaxed">
                       Proportional ownership representation of pool share.
                       Redeemable for underlying assets plus accumulated fees.
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-bold text-accent">PRICE</h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Real-time exchange rate between token pairs calculated from
+                      current pool reserves. Updates with each swap transaction.
                     </p>
                   </div>
                 </div>

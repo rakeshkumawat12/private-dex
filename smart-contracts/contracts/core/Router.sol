@@ -6,7 +6,6 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "../libraries/Math.sol";
 import "../interfaces/IFactory.sol";
 import "../interfaces/IPair.sol";
-import "../interfaces/IWhitelistManager.sol";
 
 /**
  * @title Router
@@ -15,15 +14,6 @@ import "../interfaces/IWhitelistManager.sol";
  */
 contract Router is ReentrancyGuard {
     address public immutable factory;
-    address public immutable whitelistManager;
-
-    modifier onlyWhitelisted() {
-        require(
-            IWhitelistManager(whitelistManager).isWhitelistedAndActive(msg.sender),
-            "Router: not whitelisted"
-        );
-        _;
-    }
 
     modifier ensure(uint256 deadline) {
         require(deadline >= block.timestamp, "Router: expired");
@@ -31,14 +21,12 @@ contract Router is ReentrancyGuard {
     }
 
     /**
-     * @notice Constructor sets factory and whitelist manager
+     * @notice Constructor sets factory address
      * @param _factory Address of the Factory contract
-     * @param _whitelistManager Address of the WhitelistManager contract
      */
-    constructor(address _factory, address _whitelistManager) {
-        require(_factory != address(0) && _whitelistManager != address(0), "Router: zero address");
+    constructor(address _factory) {
+        require(_factory != address(0), "Router: zero address");
         factory = _factory;
-        whitelistManager = _whitelistManager;
     }
 
     /**
@@ -153,7 +141,6 @@ contract Router is ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyWhitelisted
         ensure(deadline)
         returns (uint256 amountA, uint256 amountB, uint256 liquidity)
     {
@@ -205,7 +192,6 @@ contract Router is ReentrancyGuard {
     )
         external
         nonReentrant
-        onlyWhitelisted
         ensure(deadline)
         returns (uint256 amountA, uint256 amountB)
     {
@@ -236,7 +222,7 @@ contract Router is ReentrancyGuard {
         address[] calldata path,
         address to,
         uint256 deadline
-    ) external nonReentrant onlyWhitelisted ensure(deadline) returns (uint256[] memory amounts) {
+    ) external nonReentrant ensure(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Router: invalid path");
         amounts = _getAmountsOut(amountIn, path);
         require(amounts[amounts.length - 1] >= amountOutMin, "Router: insufficient output amount");
@@ -263,7 +249,7 @@ contract Router is ReentrancyGuard {
         address[] calldata path,
         address to,
         uint256 deadline
-    ) external nonReentrant onlyWhitelisted ensure(deadline) returns (uint256[] memory amounts) {
+    ) external nonReentrant ensure(deadline) returns (uint256[] memory amounts) {
         require(path.length >= 2, "Router: invalid path");
         amounts = _getAmountsIn(amountOut, path);
         require(amounts[0] <= amountInMax, "Router: excessive input amount");

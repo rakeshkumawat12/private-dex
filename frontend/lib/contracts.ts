@@ -1,6 +1,6 @@
-// Contract addresses - Deployed on Sepolia Testnet
-export const ROUTER_ADDRESS = (process.env.NEXT_PUBLIC_ROUTER_ADDRESS || '0x05b6B7d9cE4BA0f12040664167b34382E050eC87') as `0x${string}`;
-export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS || '0xC36EE51C750F6290977D212FEE5C0Af95Fc3bC57') as `0x${string}`;
+// Contract addresses - Deployed on Sepolia Testnet (No Whitelist Version)
+export const ROUTER_ADDRESS = (process.env.NEXT_PUBLIC_ROUTER_ADDRESS || '0x8354131844eD924Ee1dBBF1e5E9A374267F4D788') as `0x${string}`;
+export const FACTORY_ADDRESS = (process.env.NEXT_PUBLIC_FACTORY_ADDRESS || '0x5276cff34F601050EE6bD117107dD6648Fdf6b20') as `0x${string}`;
 export const WHITELIST_MANAGER_ADDRESS = (process.env.NEXT_PUBLIC_WHITELIST_MANAGER_ADDRESS || '0x9Dc786Ad986e1d4cb1E85e4469E8443efCBfAD2E') as `0x${string}`;
 
 // Router ABI - essential functions for DEX operations

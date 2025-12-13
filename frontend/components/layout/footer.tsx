@@ -37,6 +37,8 @@ export function Footer() {
                 { name: "SWAP", href: "/swap" },
                 { name: "LIQUIDITY", href: "/liquidity" },
                 { name: "STATS", href: "/stats" },
+                { name: "FAUCET", href: "/faucet" },
+                { name: "WHITELIST", href: "/whitelist" },
               ].map((link) => (
                 <li key={link.href}>
                   <Link

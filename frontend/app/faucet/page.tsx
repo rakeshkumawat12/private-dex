@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { motion } from "framer-motion";
 import { Droplet, Loader2, CheckCircle2, XCircle, ExternalLink } from "lucide-react";
@@ -26,11 +26,9 @@ const ERC20_ABI = [
   },
 ] as const;
 
-export default function FaucetPage() {
+function TokenCard({ token, index }: { token: typeof MOCK_TOKENS[0]; index: number }) {
   const { address, isConnected } = useAccount();
-  const [currentTokenIndex, setCurrentTokenIndex] = useState<number | null>(null);
-  const [completedTokens, setCompletedTokens] = useState<Set<number>>(new Set());
-  const [failedTokens, setFailedTokens] = useState<Set<number>>(new Set());
+  const [hasMinted, setHasMinted] = useState(false);
 
   const { data: hash, writeContract, isPending, error } = useWriteContract();
 
@@ -38,61 +36,129 @@ export default function FaucetPage() {
     hash,
   });
 
-  const handleMintAll = async () => {
+  const handleMint = () => {
     if (!address || !isConnected) return;
 
-    setCompletedTokens(new Set());
-    setFailedTokens(new Set());
-    setCurrentTokenIndex(0);
+    const amount = parseUnits("1000", token.decimals);
 
-    mintToken(0);
+    writeContract({
+      address: token.address as `0x${string}`,
+      abi: ERC20_ABI,
+      functionName: "mint",
+      args: [address as `0x${string}`, amount],
+    });
   };
 
-  const mintToken = async (tokenIndex: number) => {
-    if (tokenIndex >= MOCK_TOKENS.length) {
-      setCurrentTokenIndex(null);
-      return;
+  // Update minted status when transaction confirms
+  useEffect(() => {
+    if (isConfirmed && !hasMinted) {
+      setHasMinted(true);
     }
+  }, [isConfirmed, hasMinted]);
 
-    setCurrentTokenIndex(tokenIndex);
-    const token = MOCK_TOKENS[tokenIndex];
+  const isMinting = isPending || isConfirming;
 
-    try {
-      const amount = parseUnits("1000", token.decimals);
+  return (
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: 0.1 + index * 0.05 }}
+      className="rounded-lg border border-border/50 bg-muted/30 p-4 space-y-3"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-lg border border-primary/30 bg-primary/10">
+            <span className="text-sm font-bold text-primary">{token.symbol[0]}</span>
+          </div>
+          <div>
+            <div className="font-semibold font-mono">{token.symbol}</div>
+            <div className="text-xs text-muted-foreground">{token.name}</div>
+          </div>
+        </div>
 
-      writeContract({
-        address: token.address as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "mint",
-        args: [address as `0x${string}`, amount],
-      });
-    } catch (err) {
-      console.error(`Error minting ${token.symbol}:`, err);
-      setFailedTokens(prev => new Set([...prev, tokenIndex]));
-      // Continue to next token
-      setTimeout(() => mintToken(tokenIndex + 1), 500);
-    }
-  };
+        <div className="flex items-center gap-3">
+          {!isConnected ? (
+            <span className="text-xs text-muted-foreground">Connect wallet</span>
+          ) : (
+            <>
+              {!hasMinted && !isMinting && !error && (
+                <button
+                  onClick={handleMint}
+                  className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-all hover:bg-primary/20 hover:border-primary/60 hover:shadow-[0_0_15px_rgba(0,255,136,0.15)]"
+                >
+                  <div className="flex items-center gap-2">
+                    <Droplet className="h-3.5 w-3.5" />
+                    MINT_1000
+                  </div>
+                </button>
+              )}
 
-  // Handle transaction confirmation
-  if (isConfirmed && currentTokenIndex !== null) {
-    const newCompleted = new Set(completedTokens);
-    newCompleted.add(currentTokenIndex);
-    setCompletedTokens(newCompleted);
+              {isMinting && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg border border-primary/20 bg-primary/5">
+                  <div className="h-4 w-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+                  <span className="text-xs font-mono text-primary">
+                    {isPending ? "CONFIRM_IN_WALLET..." : "MINTING..."}
+                  </span>
+                </div>
+              )}
 
-    // Move to next token
-    const nextIndex = currentTokenIndex + 1;
-    setTimeout(() => {
-      if (nextIndex < MOCK_TOKENS.length) {
-        mintToken(nextIndex);
-      } else {
-        setCurrentTokenIndex(null);
-      }
-    }, 1000);
-  }
+              {isConfirmed && hasMinted && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg border border-primary/40 bg-primary/10">
+                  <CheckCircle2 className="h-4 w-4 text-primary" />
+                  <span className="text-xs font-mono text-primary">MINTED_SUCCESS</span>
+                </div>
+              )}
 
-  const isMinting = currentTokenIndex !== null;
-  const allCompleted = completedTokens.size === MOCK_TOKENS.length;
+              {error && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-lg border border-destructive/40 bg-destructive/10">
+                  <XCircle className="h-4 w-4 text-destructive" />
+                  <span className="text-xs font-mono text-destructive">TX_FAILED</span>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Transaction link - Improved styling */}
+      {hash && (
+        <div className="rounded-md border border-primary/10 bg-primary/5 p-3">
+          <a
+            href={`https://sepolia.etherscan.io/tx/${hash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-2">
+              <ExternalLink className="h-3.5 w-3.5 text-primary" />
+              <span className="text-xs font-mono text-muted-foreground group-hover:text-primary transition-colors">
+                VIEW_ON_ETHERSCAN
+              </span>
+            </div>
+            <span className="text-xs font-mono text-primary/60">
+              {hash.slice(0, 6)}...{hash.slice(-4)}
+            </span>
+          </a>
+        </div>
+      )}
+
+      {/* Error message - Improved styling */}
+      {error && (
+        <div className="rounded-md border border-destructive/20 bg-destructive/5 p-3">
+          <div className="flex items-start gap-2">
+            <XCircle className="h-4 w-4 text-destructive flex-shrink-0 mt-0.5" />
+            <p className="text-xs text-destructive/90 font-mono">
+              {error.message.includes("rejected") ? "USER_REJECTED_TRANSACTION" : "ERROR: " + error.message.slice(0, 50)}
+            </p>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+export default function FaucetPage() {
+  const { isConnected } = useAccount();
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8 space-y-8">
@@ -124,122 +190,22 @@ export default function FaucetPage() {
         <div className="space-y-2">
           <h2 className="text-xl font-semibold">Get Test Tokens</h2>
           <p className="text-sm text-muted-foreground">
-            Click the button below to mint 1000 tokens of each type to your wallet.
-            This makes it easy to test swaps and liquidity provision.
+            Click the "Mint" button for each token you want to receive. Each mint will give you 1000 tokens.
           </p>
         </div>
+
+        {/* Connection Warning */}
+        {!isConnected && (
+          <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4 text-sm text-yellow-500">
+            Please connect your wallet to use the faucet
+          </div>
+        )}
 
         {/* Token List */}
         <div className="space-y-3">
           {MOCK_TOKENS.map((token, index) => (
-            <motion.div
-              key={token.address}
-              initial={{ opacity: 0, x: -20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.1 + index * 0.05 }}
-              className="flex items-center justify-between rounded-lg border border-border/50 bg-muted/30 p-4"
-            >
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-primary/30 bg-primary/10">
-                  <span className="text-sm font-bold text-primary">{token.symbol[0]}</span>
-                </div>
-                <div>
-                  <div className="font-semibold">{token.symbol}</div>
-                  <div className="text-xs text-muted-foreground">{token.name}</div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="text-sm text-muted-foreground">1000 tokens</span>
-                {completedTokens.has(index) && (
-                  <CheckCircle2 className="h-5 w-5 text-green-500" />
-                )}
-                {failedTokens.has(index) && (
-                  <XCircle className="h-5 w-5 text-destructive" />
-                )}
-                {currentTokenIndex === index && (
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                )}
-              </div>
-            </motion.div>
+            <TokenCard key={token.address} token={token} index={index} />
           ))}
-        </div>
-
-        {/* Action Button */}
-        <div className="space-y-4">
-          {!isConnected ? (
-            <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-4 text-sm text-yellow-500">
-              Please connect your wallet to use the faucet
-            </div>
-          ) : (
-            <button
-              onClick={handleMintAll}
-              disabled={isMinting}
-              className="w-full flex items-center justify-center gap-2 rounded-lg border border-primary/40 bg-primary/10 px-6 py-4 text-sm font-medium text-primary transition-all hover:bg-primary/20 hover:border-primary/60 hover:shadow-[0_0_20px_rgba(0,255,136,0.15)] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isMinting ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Minting {MOCK_TOKENS[currentTokenIndex]?.symbol}...
-                </>
-              ) : allCompleted ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4" />
-                  All Tokens Minted Successfully
-                </>
-              ) : (
-                <>
-                  <Droplet className="h-4 w-4" />
-                  Get Test Tokens
-                </>
-              )}
-            </button>
-          )}
-
-          {allCompleted && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-green-500/20 bg-green-500/10 p-4 space-y-2"
-            >
-              <div className="flex items-center gap-2 text-sm font-medium text-green-500">
-                <CheckCircle2 className="h-4 w-4" />
-                Success! Tokens minted to your wallet
-              </div>
-              <p className="text-xs text-green-500/70">
-                You can now add these tokens to MetaMask and start trading!
-              </p>
-            </motion.div>
-          )}
-
-          {error && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="rounded-lg border border-destructive/20 bg-destructive/10 p-4"
-            >
-              <div className="flex items-center gap-2 text-sm font-medium text-destructive">
-                <XCircle className="h-4 w-4" />
-                Transaction Failed
-              </div>
-              <p className="text-xs text-destructive/70 mt-1">
-                {error.message}
-              </p>
-            </motion.div>
-          )}
-
-          {hash && (
-            <div className="text-xs text-muted-foreground text-center">
-              <a
-                href={`https://sepolia.etherscan.io/tx/${hash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 hover:text-primary transition-colors"
-              >
-                View transaction <ExternalLink className="h-3 w-3" />
-              </a>
-            </div>
-          )}
         </div>
 
         {/* Instructions */}
@@ -252,11 +218,11 @@ export default function FaucetPage() {
             </li>
             <li className="flex gap-2">
               <span className="text-primary">2.</span>
-              <span>Click "Get Test Tokens" to mint all tokens at once</span>
+              <span>Click the "Mint" button for each token you want</span>
             </li>
             <li className="flex gap-2">
               <span className="text-primary">3.</span>
-              <span>Approve each transaction in your wallet (4 total)</span>
+              <span>Approve the transaction in your wallet</span>
             </li>
             <li className="flex gap-2">
               <span className="text-primary">4.</span>

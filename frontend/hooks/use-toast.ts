@@ -152,6 +152,7 @@ type Toast = Omit<ToasterToast, "id">;
 
 function toast({ ...props }: Toast) {
   const id = genId();
+  console.log("🔔 Toast called:", props);
 
   const update = (props: ToasterToast) =>
     dispatch({
@@ -171,6 +172,8 @@ function toast({ ...props }: Toast) {
       },
     },
   });
+
+  console.log("🔔 Toast dispatched. Current state:", memoryState);
 
   // Auto-dismiss after specified duration (default 10 seconds)
   const duration = props.duration ?? DEFAULT_TOAST_DURATION;
