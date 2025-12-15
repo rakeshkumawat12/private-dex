@@ -31,7 +31,7 @@ export function DemoBanner() {
           {/* Close button */}
           <button
             onClick={() => setIsVisible(false)}
-            className="ml-auto p-1.5 rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-colors group"
+            className="cursor-pointer ml-auto p-1.5 rounded-lg hover:bg-primary/10 border border-transparent hover:border-primary/20 transition-colors group"
             aria-label="Close banner"
           >
             <X className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />

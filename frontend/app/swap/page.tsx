@@ -27,30 +27,22 @@ export default function SwapPage() {
   const [toAmount, setToAmount] = useState("");
   const [slippage, setSlippage] = useState("0.5");
   const [showSettings, setShowSettings] = useState(false);
-  const [approvingToken, setApprovingToken] = useState(false);
 
-  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
+  const { writeContract, data: hash, isPending, error: writeError, reset: resetWrite } = useWriteContract();
   const { isLoading: isConfirming, isSuccess, isError: txError } = useWaitForTransactionReceipt({ hash });
 
-  const { data: fromBalance } = useReadContract({
+  const { data: fromBalance, refetch: refetchFromBalance } = useReadContract({
     address: fromToken.address as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
   });
 
-  const { data: toBalance } = useReadContract({
+  const { data: toBalance, refetch: refetchToBalance } = useReadContract({
     address: toToken.address as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-  });
-
-  const { data: allowance } = useReadContract({
-    address: fromToken.address as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: "allowance",
-    args: address ? [address, ROUTER_ADDRESS] : undefined,
   });
 
   // Get pair address from factory
@@ -150,52 +142,81 @@ export default function SwapPage() {
     }
   }, [fromAmount, reserves, token0Address, fromToken, toToken]);
 
+  // Handle transaction success - Execute swap after transfer confirms
   useEffect(() => {
     if (isSuccess && hash) {
-      if (approvingToken) {
-        // Approval completed, auto-trigger swap
-        setApprovingToken(false);
+      const pendingSwap = (window as any).pendingSwap;
+
+      // Check if this was a transfer transaction (step 1)
+      if (pendingSwap && pendingSwap.amountIn) {
         toast({
-          title: "✅ TOKEN_APPROVED",
-          description: `${fromToken.symbol} approved! Executing swap...`,
-          variant: "success",
+          title: "✅ TRANSFER_COMPLETE",
+          description: `Step 2/2: Executing swap...`,
         });
-        setTimeout(() => handleApproveAndSwap(), 1000);
+
+        // Wait a bit then execute the actual swap
+        setTimeout(() => {
+          writeContract({
+            address: ROUTER_ADDRESS,
+            abi: ROUTER_ABI,
+            functionName: "swapExactTokensForTokens",
+            args: [
+              pendingSwap.amountIn,
+              pendingSwap.amountOutMin,
+              pendingSwap.path,
+              pendingSwap.to,
+              pendingSwap.deadline,
+            ],
+          });
+
+          // Clear pending swap
+          delete (window as any).pendingSwap;
+
+          toast({
+            title: "⏳ SWAPPING_TOKENS",
+            description: `Swapping ${pendingSwap.fromAmount} ${pendingSwap.fromSymbol} for ${pendingSwap.toSymbol}...`,
+          });
+        }, 1500);
       } else {
-        // Swap completed
+        // This was the actual swap transaction (step 2)
         toast({
-          title: "✅ SWAP_EXECUTED",
-          description: `${fromAmount} ${fromToken.symbol} → ${toAmount} ${toToken.symbol}`,
+          title: "✅ SWAP_COMPLETED",
+          description: `Successfully completed swap!`,
           variant: "success",
         });
+
+        // Clear the form
         setFromAmount("");
         setToAmount("");
-        setApprovingToken(false);
+
+        // Refetch balances
+        refetchFromBalance();
+        refetchToBalance();
+
+        // Reset after delay
+        setTimeout(() => {
+          resetWrite();
+        }, 2000);
       }
     }
-  }, [isSuccess, hash, fromAmount, toAmount, fromToken.symbol, toToken.symbol, toast, approvingToken]);
+  }, [isSuccess, hash, toast, refetchFromBalance, refetchToBalance, resetWrite]);
 
+  // Handle transaction errors
   useEffect(() => {
-    if (txError) {
+    if (txError || writeError) {
+      const errorMessage = writeError?.message || "Transaction failed. Please try again.";
+
       toast({
         title: "❌ SWAP_FAILED",
-        description: "Transaction failed. Please check your wallet and try again.",
+        description: errorMessage.includes("rejected") || errorMessage.includes("denied")
+          ? "Transaction rejected by user"
+          : "Transaction failed. Please check your wallet and try again.",
         variant: "error",
       });
-      setApprovingToken(false);
-    }
-  }, [txError, toast]);
 
-  useEffect(() => {
-    if (writeError) {
-      toast({
-        title: "❌ TRANSACTION_REJECTED",
-        description: writeError.message || "User rejected the transaction",
-        variant: "error",
-      });
-      setApprovingToken(false);
+      resetWrite();
     }
-  }, [writeError, toast]);
+  }, [txError, writeError, toast, resetWrite]);
 
   const handleSwapTokens = () => {
     const temp = fromToken;
@@ -205,99 +226,8 @@ export default function SwapPage() {
     setToAmount(fromAmount);
   };
 
-  const handleApproveAndSwap = async () => {
-    if (!fromAmount || !toAmount || !isConnected || isPending || isConfirming) return;
-
-    try {
-      // Step 1: Approve token if needed (and not already approving)
-      if (needsApproval && !approvingToken) {
-        setApprovingToken(true);
-        // Approve max amount to avoid repeated approvals
-        const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-
-        writeContract({
-          address: fromToken.address as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: "approve",
-          args: [ROUTER_ADDRESS, maxApproval],
-          gas: BigInt(100000),
-        });
-
-        toast({
-          title: "⏳ STEP 1/2",
-          description: `Approving ${fromToken.symbol}...`,
-        });
-        return;
-      }
-
-      // Step 2: Execute swap (only if not currently approving)
-      if (!approvingToken) {
-        const amountIn = parseUnits(fromAmount, fromToken.decimals);
-        const amountOutMin = parseUnits(
-          (parseFloat(toAmount) * (1 - parseFloat(slippage) / 100)).toString(),
-          toToken.decimals
-        );
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
-
-        writeContract({
-          address: ROUTER_ADDRESS,
-          abi: ROUTER_ABI,
-          functionName: "swapExactTokensForTokens",
-          args: [
-            amountIn,
-            amountOutMin,
-            [fromToken.address as `0x${string}`, toToken.address as `0x${string}`],
-            address as `0x${string}`,
-            deadline,
-          ],
-          gas: BigInt(300000),
-        });
-
-        toast({
-          title: "⏳ STEP 2/2",
-          description: `Swapping ${fromAmount} ${fromToken.symbol} for ${toToken.symbol}...`,
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "❌ TRANSACTION_FAILED",
-        description: error.message || "Failed to execute swap",
-        variant: "error",
-      });
-      setApprovingToken(false);
-    }
-  };
-
-  const handleApprove = async () => {
-    if (!fromAmount || !isConnected) return;
-
-    try {
-      // Approve max amount to avoid repeated approvals
-      const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-
-      writeContract({
-        address: fromToken.address as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [ROUTER_ADDRESS, maxApproval],
-        gas: BigInt(100000),
-      });
-
-      toast({
-        title: "⏳ APPROVAL_PENDING",
-        description: `Approving ${fromToken.symbol}...`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "❌ APPROVAL_FAILED",
-        description: error.message || "Failed to approve token",
-        variant: "error",
-      });
-    }
-  };
-
   const handleSwap = async () => {
-    if (!fromAmount || !toAmount || !isConnected) return;
+    if (!fromAmount || !toAmount || !isConnected || isPending || isConfirming) return;
 
     try {
       const amountIn = parseUnits(fromAmount, fromToken.decimals);
@@ -307,36 +237,40 @@ export default function SwapPage() {
       );
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
-      writeContract({
-        address: ROUTER_ADDRESS,
-        abi: ROUTER_ABI,
-        functionName: "swapExactTokensForTokens",
-        args: [
-          amountIn,
-          amountOutMin,
-          [fromToken.address as `0x${string}`, toToken.address as `0x${string}`],
-          address as `0x${string}`,
-          deadline,
-        ],
-        gas: BigInt(300000),
+      toast({
+        title: "⏳ TRANSFERRING_TOKENS",
+        description: `Step 1/2: Transferring ${fromAmount} ${fromToken.symbol} to Router...`,
       });
 
-      toast({
-        title: "⏳ SWAP_PENDING",
-        description: `Swapping ${fromAmount} ${fromToken.symbol} for ${toToken.symbol}...`,
+      // Step 1: Transfer input tokens to Router
+      writeContract({
+        address: fromToken.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [ROUTER_ADDRESS, amountIn],
       });
+
+      // Note: The swap will be called manually after transfer confirms
+      // Store swap parameters for step 2
+      (window as any).pendingSwap = {
+        amountIn,
+        amountOutMin,
+        path: [fromToken.address as `0x${string}`, toToken.address as `0x${string}`],
+        to: address as `0x${string}`,
+        deadline,
+        fromAmount,
+        fromSymbol: fromToken.symbol,
+        toSymbol: toToken.symbol,
+      };
     } catch (error: any) {
+      console.error("Transfer error:", error);
       toast({
-        title: "❌ SWAP_FAILED",
-        description: error.message || "Failed to execute swap",
+        title: "❌ TRANSFER_FAILED",
+        description: error.message || "Failed to transfer tokens",
         variant: "error",
       });
     }
   };
-
-  const needsApproval = allowance !== undefined && fromAmount
-    ? allowance < parseUnits(fromAmount, fromToken.decimals)
-    : true;
 
   return (
     <div className="relative min-h-[calc(100vh-8rem)]">
@@ -381,7 +315,7 @@ export default function SwapPage() {
               </div>
               <button
                 onClick={() => setShowSettings(!showSettings)}
-                className="p-1.5 rounded hover:bg-primary/10 transition-colors"
+                className="cursor-pointer p-1.5 rounded hover:bg-primary/10 transition-colors"
               >
                 <Settings className="h-4 w-4 text-muted-foreground" />
               </button>
@@ -402,7 +336,7 @@ export default function SwapPage() {
                       <button
                         key={value}
                         onClick={() => setSlippage(value)}
-                        className={`px-3 py-1 text-xs rounded border transition-all ${
+                        className={`cursor-pointer px-3 py-1 text-xs rounded border transition-all ${
                           slippage === value
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border/50 text-muted-foreground hover:border-primary/50"
@@ -425,7 +359,7 @@ export default function SwapPage() {
                   {fromBalance !== undefined && (
                     <button
                       onClick={() => setFromAmount(formatUnits(fromBalance, fromToken.decimals))}
-                      className="text-muted-foreground hover:text-primary transition-colors"
+                      className="cursor-pointer text-muted-foreground hover:text-primary transition-colors"
                     >
                       BAL: {parseFloat(formatUnits(fromBalance, fromToken.decimals)).toFixed(4)}
                     </button>
@@ -466,7 +400,7 @@ export default function SwapPage() {
                   whileHover={{ scale: 1.1, rotate: 180 }}
                   whileTap={{ scale: 0.95 }}
                   transition={{ duration: 0.3 }}
-                  className="p-2.5 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors"
+                  className="cursor-pointer p-2.5 rounded-lg bg-primary/10 border border-primary/30 text-primary hover:bg-primary/20 transition-colors"
                 >
                   <ArrowDownUp className="h-4 w-4" />
                 </motion.button>
@@ -547,16 +481,16 @@ export default function SwapPage() {
                     className="w-full"
                     size="lg"
                     variant="glow"
-                    onClick={handleApproveAndSwap}
+                    onClick={handleSwap}
                     disabled={!fromAmount || !toAmount || isPending || isConfirming}
                   >
                     {isPending || isConfirming ? (
                       <span className="flex items-center gap-2">
                         <span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                        {approvingToken ? `STEP 1/2: APPROVING ${fromToken.symbol}...` : "STEP 2/2: EXECUTING SWAP..."}
+                        SWAPPING...
                       </span>
                     ) : (
-                      needsApproval ? `APPROVE & SWAP` : "EXECUTE_SWAP"
+                      "EXECUTE_SWAP"
                     )}
                   </Button>
                 )}

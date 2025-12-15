@@ -27,11 +27,9 @@ export default function LiquidityPage() {
   const [amountA, setAmountA] = useState("");
   const [amountB, setAmountB] = useState("");
   const [lpAmount, setLpAmount] = useState("");
-  const [approvingTokenA, setApprovingTokenA] = useState(false);
-  const [approvingTokenB, setApprovingTokenB] = useState(false);
-  const [approvingLP, setApprovingLP] = useState(false);
+  const [liquidityStep, setLiquidityStep] = useState<"idle" | "transfer_a" | "transfer_b" | "transfer_lp" | "executing">("idle");
 
-  const { writeContract, data: hash, isPending, error: writeError } = useWriteContract();
+  const { writeContract, data: hash, isPending, error: writeError, reset: resetWrite } = useWriteContract();
   const { isLoading: isConfirming, isSuccess, isError: txError } = useWaitForTransactionReceipt({ hash });
 
   const { data: pairAddress } = useReadContract({
@@ -41,7 +39,7 @@ export default function LiquidityPage() {
     args: [tokenA.address as `0x${string}`, tokenB.address as `0x${string}`],
   });
 
-  const { data: lpBalance } = useReadContract({
+  const { data: lpBalance, refetch: refetchLpBalance } = useReadContract({
     address: pairAddress as `0x${string}`,
     abi: PAIR_ABI,
     functionName: "balanceOf",
@@ -69,51 +67,6 @@ export default function LiquidityPage() {
     },
   });
 
-  // Check allowances for both tokens
-  const { data: allowanceA } = useReadContract({
-    address: tokenA.address as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: "allowance",
-    args: address ? [address, ROUTER_ADDRESS] : undefined,
-    query: {
-      enabled: !!address,
-    },
-  });
-
-  const { data: allowanceB } = useReadContract({
-    address: tokenB.address as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: "allowance",
-    args: address ? [address, ROUTER_ADDRESS] : undefined,
-    query: {
-      enabled: !!address,
-    },
-  });
-
-  // Check LP token allowance for removing liquidity
-  const { data: lpAllowance } = useReadContract({
-    address: pairAddress as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: "allowance",
-    args: address ? [address, ROUTER_ADDRESS] : undefined,
-    query: {
-      enabled: !!address && !!pairAddress && pairAddress !== "0x0000000000000000000000000000000000000000",
-    },
-  });
-
-  // Check if approvals are needed (defined before useEffect hooks)
-  const needsApprovalA = allowanceA !== undefined && amountA
-    ? allowanceA < parseUnits(amountA, tokenA.decimals)
-    : true;
-
-  const needsApprovalB = allowanceB !== undefined && amountB
-    ? allowanceB < parseUnits(amountB, tokenB.decimals)
-    : true;
-
-  const needsLPApproval = lpAllowance !== undefined && lpAmount && parseFloat(lpAmount) > 0
-    ? lpAllowance < parseUnits(lpAmount, 18)
-    : false;
-
   // Auto-calculate amountB based on pool ratio when amountA changes
   useEffect(() => {
     if (mode === "add" && reserves && token0Address && amountA && parseFloat(amountA) > 0) {
@@ -140,376 +93,173 @@ export default function LiquidityPage() {
     }
   }, [amountA, reserves, token0Address, tokenA, tokenB, mode]);
 
-  // Show success toast for transactions and auto-continue to next step
+  // Handle transaction success - Multi-step flow
   useEffect(() => {
     if (isSuccess && hash) {
-      // Determine what transaction completed based on current state flags
-      if (mode === "add") {
-        if (approvingTokenA) {
-          // Token A approval completed
-          setApprovingTokenA(false);
-          toast({
-            title: "✅ STEP 1/3 COMPLETE",
-            description: `${tokenA.symbol} approved! Continuing...`,
-            variant: "success",
-          });
-          // Auto-trigger next step after a short delay
-          setTimeout(() => handleApproveAndAdd(), 1000);
-        } else if (approvingTokenB) {
-          // Token B approval completed
-          setApprovingTokenB(false);
-          toast({
-            title: "✅ STEP 2/3 COMPLETE",
-            description: `${tokenB.symbol} approved! Continuing...`,
-            variant: "success",
-          });
-          // Auto-trigger next step after a short delay
-          setTimeout(() => handleApproveAndAdd(), 1000);
-        } else {
-          // Add liquidity transaction completed
+      const pending = (window as any).pendingLiquidity;
+
+      if (!pending) {
+        // Final success after router call
+        if (mode === "add") {
           toast({
             title: "✅ LIQUIDITY_ADDED",
-            description: `Successfully added ${amountA} ${tokenA.symbol} + ${amountB} ${tokenB.symbol}`,
+            description: `Successfully added liquidity!`,
             variant: "success",
           });
           setAmountA("");
           setAmountB("");
-          setApprovingTokenA(false);
-          setApprovingTokenB(false);
-        }
-      } else if (mode === "remove") {
-        if (approvingLP) {
-          // LP approval completed, auto-trigger remove liquidity
-          setApprovingLP(false);
-          toast({
-            title: "✅ LP_TOKENS_APPROVED",
-            description: "LP tokens approved! Removing liquidity...",
-            variant: "success",
-          });
-          setTimeout(() => handleApproveAndRemove(), 1000);
         } else {
-          // Remove liquidity transaction completed
           toast({
             title: "✅ LIQUIDITY_REMOVED",
-            description: `Successfully removed liquidity`,
+            description: `Successfully removed liquidity!`,
             variant: "success",
           });
           setLpAmount("");
-          setApprovingLP(false);
         }
+        setLiquidityStep("idle");
+        refetchLpBalance();
+        setTimeout(() => resetWrite(), 2000);
+        return;
+      }
+
+      // Handle step transitions
+      if (liquidityStep === "transfer_a") {
+        // Token A transferred, now transfer Token B
+        toast({
+          title: "✅ TOKEN_A_TRANSFERRED",
+          description: `Step 2/3: Transferring ${pending.amountB} ${pending.tokenBSymbol}...`,
+        });
+        setLiquidityStep("transfer_b");
+        setTimeout(() => {
+          writeContract({
+            address: pending.tokenBAddress as `0x${string}`,
+            abi: ERC20_ABI,
+            functionName: "transfer",
+            args: [ROUTER_ADDRESS, pending.amountBDesired],
+          });
+        }, 1500);
+      } else if (liquidityStep === "transfer_b") {
+        // Both tokens transferred, now call addLiquidity
+        toast({
+          title: "✅ TOKENS_TRANSFERRED",
+          description: `Step 3/3: Adding liquidity...`,
+        });
+        setLiquidityStep("executing");
+        setTimeout(() => {
+          writeContract({
+            address: ROUTER_ADDRESS,
+            abi: ROUTER_ABI,
+            functionName: "addLiquidity",
+            args: [
+              pending.tokenAAddress as `0x${string}`,
+              pending.tokenBAddress as `0x${string}`,
+              pending.amountADesired,
+              pending.amountBDesired,
+              pending.amountAMin,
+              pending.amountBMin,
+              address as `0x${string}`,
+              pending.deadline,
+            ],
+          });
+          delete (window as any).pendingLiquidity;
+        }, 1500);
+      } else if (liquidityStep === "transfer_lp") {
+        // LP tokens transferred, now call removeLiquidity
+        toast({
+          title: "✅ LP_TOKENS_TRANSFERRED",
+          description: `Step 2/2: Removing liquidity...`,
+        });
+        setLiquidityStep("executing");
+        setTimeout(() => {
+          writeContract({
+            address: ROUTER_ADDRESS,
+            abi: ROUTER_ABI,
+            functionName: "removeLiquidity",
+            args: [
+              pending.tokenAAddress as `0x${string}`,
+              pending.tokenBAddress as `0x${string}`,
+              pending.liquidity,
+              pending.amountAMin,
+              pending.amountBMin,
+              address as `0x${string}`,
+              pending.deadline,
+            ],
+          });
+          delete (window as any).pendingLiquidity;
+        }, 1500);
       }
     }
-  }, [isSuccess, hash, mode, amountA, tokenA.symbol, amountB, tokenB.symbol, toast, approvingTokenA, approvingTokenB, approvingLP]);
+  }, [isSuccess, hash, liquidityStep, mode, address, toast, refetchLpBalance, resetWrite]);
 
-  // Show error toast for transaction failures
+  // Handle transaction errors
   useEffect(() => {
-    if (txError) {
+    if (txError || writeError) {
+      const errorMessage = writeError?.message || "Transaction failed. Please try again.";
+
       toast({
-        title: "❌ TRANSACTION_FAILED",
-        description: "Transaction failed. Please check your wallet and try again.",
+        title: mode === "add" ? "❌ ADD_LIQUIDITY_FAILED" : "❌ REMOVE_LIQUIDITY_FAILED",
+        description: errorMessage.includes("rejected") || errorMessage.includes("denied")
+          ? "Transaction rejected by user"
+          : "Transaction failed. Please check your wallet and try again.",
         variant: "error",
       });
-      // Reset all approving flags on error
-      setApprovingTokenA(false);
-      setApprovingTokenB(false);
-      setApprovingLP(false);
+
+      resetWrite();
     }
-  }, [txError, toast]);
-
-  // Show error toast for rejected transactions
-  useEffect(() => {
-    if (writeError) {
-      toast({
-        title: "❌ TRANSACTION_REJECTED",
-        description: writeError.message || "User rejected the transaction",
-        variant: "error",
-      });
-      // Reset all approving flags on rejection
-      setApprovingTokenA(false);
-      setApprovingTokenB(false);
-      setApprovingLP(false);
-    }
-  }, [writeError, toast]);
-
-  const handleApproveAndAdd = async () => {
-    if (!amountA || !amountB || !isConnected || isPending || isConfirming) return;
-
-    try {
-      // Step 1: Approve Token A if needed (and not already approving)
-      if (needsApprovalA && !approvingTokenA && !approvingTokenB) {
-        setApprovingTokenA(true);
-        // Approve max amount to avoid repeated approvals
-        const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-
-        writeContract({
-          address: tokenA.address as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: "approve",
-          args: [ROUTER_ADDRESS, maxApproval],
-          gas: BigInt(100000),
-        });
-
-        toast({
-          title: "⏳ STEP 1/3",
-          description: `Approving ${tokenA.symbol}...`,
-        });
-        return;
-      }
-
-      // Step 2: Approve Token B if needed (and not already approving)
-      if (needsApprovalB && !approvingTokenA && !approvingTokenB) {
-        setApprovingTokenB(true);
-        // Approve max amount to avoid repeated approvals
-        const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-
-        writeContract({
-          address: tokenB.address as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: "approve",
-          args: [ROUTER_ADDRESS, maxApproval],
-          gas: BigInt(100000),
-        });
-
-        toast({
-          title: "⏳ STEP 2/3",
-          description: `Approving ${tokenB.symbol}...`,
-        });
-        return;
-      }
-
-      // Step 3: Add liquidity (only if not currently approving anything)
-      if (!approvingTokenA && !approvingTokenB) {
-        const amountADesired = parseUnits(amountA, tokenA.decimals);
-        const amountBDesired = parseUnits(amountB, tokenB.decimals);
-        const amountAMin = (amountADesired * BigInt(98)) / BigInt(100);
-        const amountBMin = (amountBDesired * BigInt(98)) / BigInt(100);
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
-
-        writeContract({
-          address: ROUTER_ADDRESS,
-          abi: ROUTER_ABI,
-          functionName: "addLiquidity",
-          args: [
-            tokenA.address as `0x${string}`,
-            tokenB.address as `0x${string}`,
-            amountADesired,
-            amountBDesired,
-            amountAMin,
-            amountBMin,
-            address as `0x${string}`,
-            deadline,
-          ],
-          gas: BigInt(500000),
-        });
-
-        toast({
-          title: "⏳ STEP 3/3",
-          description: `Adding ${amountA} ${tokenA.symbol} + ${amountB} ${tokenB.symbol}...`,
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "❌ TRANSACTION_FAILED",
-        description: error.message || "Failed to process transaction",
-        variant: "error",
-      });
-      // Reset approving states on error
-      setApprovingTokenA(false);
-      setApprovingTokenB(false);
-    }
-  };
-
-  const handleApproveAndRemove = async () => {
-    if (!lpAmount || !isConnected || !pairAddress || isPending || isConfirming) return;
-
-    try {
-      // Step 1: Approve LP tokens if needed (and not already approving)
-      if (needsLPApproval && !approvingLP) {
-        setApprovingLP(true);
-        // Approve max amount to avoid repeated approvals
-        const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-
-        writeContract({
-          address: pairAddress as `0x${string}`,
-          abi: ERC20_ABI,
-          functionName: "approve",
-          args: [ROUTER_ADDRESS, maxApproval],
-          gas: BigInt(100000),
-        });
-
-        toast({
-          title: "⏳ STEP 1/2",
-          description: "Approving LP tokens...",
-        });
-        return;
-      }
-
-      // Step 2: Remove liquidity (only if not currently approving)
-      if (!approvingLP) {
-        const liquidity = parseUnits(lpAmount, 18);
-        const amountAMin = BigInt(0);
-        const amountBMin = BigInt(0);
-        const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
-
-        writeContract({
-          address: ROUTER_ADDRESS,
-          abi: ROUTER_ABI,
-          functionName: "removeLiquidity",
-          args: [
-            tokenA.address as `0x${string}`,
-            tokenB.address as `0x${string}`,
-            liquidity,
-            amountAMin,
-            amountBMin,
-            address as `0x${string}`,
-            deadline,
-          ],
-          gas: BigInt(400000),
-        });
-
-        toast({
-          title: "⏳ STEP 2/2",
-          description: `Removing ${lpAmount} LP tokens...`,
-        });
-      }
-    } catch (error: any) {
-      toast({
-        title: "❌ TRANSACTION_FAILED",
-        description: error.message || "Failed to remove liquidity",
-        variant: "error",
-      });
-      // Reset approving state on error
-      setApprovingLP(false);
-    }
-  };
-
-  const handleApproveA = async () => {
-    if (!amountA || !isConnected) return;
-
-    try {
-      // Approve max amount to avoid repeated approvals
-      const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-
-      writeContract({
-        address: tokenA.address as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [ROUTER_ADDRESS, maxApproval],
-        gas: BigInt(100000),
-      });
-
-      toast({
-        title: "⏳ APPROVAL_PENDING",
-        description: `Approving ${tokenA.symbol}...`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "❌ APPROVAL_FAILED",
-        description: error.message || "Failed to approve token",
-        variant: "error",
-      });
-    }
-  };
-
-  const handleApproveB = async () => {
-    if (!amountB || !isConnected) return;
-
-    try {
-      // Approve max amount to avoid repeated approvals
-      const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-
-      writeContract({
-        address: tokenB.address as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [ROUTER_ADDRESS, maxApproval],
-        gas: BigInt(100000),
-      });
-
-      toast({
-        title: "⏳ APPROVAL_PENDING",
-        description: `Approving ${tokenB.symbol}...`,
-      });
-    } catch (error: any) {
-      toast({
-        title: "❌ APPROVAL_FAILED",
-        description: error.message || "Failed to approve token",
-        variant: "error",
-      });
-    }
-  };
+  }, [txError, writeError, mode, toast, resetWrite]);
 
   const handleAddLiquidity = async () => {
-    if (!amountA || !amountB || !isConnected) return;
+    if (!amountA || !amountB || !isConnected || isPending || isConfirming) return;
 
     try {
       const amountADesired = parseUnits(amountA, tokenA.decimals);
       const amountBDesired = parseUnits(amountB, tokenB.decimals);
-      // Allow 2% slippage (accept minimum of 98% of desired amounts)
       const amountAMin = (amountADesired * BigInt(98)) / BigInt(100);
       const amountBMin = (amountBDesired * BigInt(98)) / BigInt(100);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
+      // Store parameters for later steps
+      (window as any).pendingLiquidity = {
+        mode: "add",
+        amountADesired,
+        amountBDesired,
+        amountAMin,
+        amountBMin,
+        deadline,
+        amountA,
+        amountB,
+        tokenASymbol: tokenA.symbol,
+        tokenBSymbol: tokenB.symbol,
+        tokenAAddress: tokenA.address,
+        tokenBAddress: tokenB.address,
+      };
+
+      // Step 1: Transfer Token A to Router
+      setLiquidityStep("transfer_a");
       writeContract({
-        address: ROUTER_ADDRESS,
-        abi: ROUTER_ABI,
-        functionName: "addLiquidity",
-        args: [
-          tokenA.address as `0x${string}`,
-          tokenB.address as `0x${string}`,
-          amountADesired,
-          amountBDesired,
-          amountAMin,
-          amountBMin,
-          address as `0x${string}`,
-          deadline,
-        ],
-        gas: BigInt(500000),
+        address: tokenA.address as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [ROUTER_ADDRESS, amountADesired],
       });
 
       toast({
-        title: "⏳ TX_PENDING",
-        description: `Adding ${amountA} ${tokenA.symbol} + ${amountB} ${tokenB.symbol}...`,
+        title: "⏳ TRANSFERRING_TOKENS",
+        description: `Step 1/3: Transferring ${amountA} ${tokenA.symbol} to Router...`,
       });
     } catch (error: any) {
+      console.error("Add liquidity error:", error);
+      setLiquidityStep("idle");
       toast({
-        title: "❌ TX_FAILED",
+        title: "❌ ADD_LIQUIDITY_FAILED",
         description: error.message || "Failed to add liquidity",
         variant: "error",
       });
     }
   };
 
-  const handleApproveLPToken = async () => {
-    if (!lpAmount || !isConnected || !pairAddress) return;
-
-    try {
-      // Approve max amount to avoid repeated approvals
-      const maxApproval = BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
-
-      writeContract({
-        address: pairAddress as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: "approve",
-        args: [ROUTER_ADDRESS, maxApproval],
-        gas: BigInt(100000),
-      });
-
-      toast({
-        title: "⏳ APPROVAL_PENDING",
-        description: "Approving LP tokens...",
-      });
-    } catch (error: any) {
-      toast({
-        title: "❌ APPROVAL_FAILED",
-        description: error.message || "Failed to approve LP tokens",
-        variant: "error",
-      });
-    }
-  };
-
   const handleRemoveLiquidity = async () => {
-    if (!lpAmount || !isConnected) return;
+    if (!lpAmount || !isConnected || !pairAddress || isPending || isConfirming) return;
 
     try {
       const liquidity = parseUnits(lpAmount, 18);
@@ -517,29 +267,37 @@ export default function LiquidityPage() {
       const amountBMin = BigInt(0);
       const deadline = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
+      // Store parameters for later steps
+      (window as any).pendingLiquidity = {
+        mode: "remove",
+        liquidity,
+        amountAMin,
+        amountBMin,
+        deadline,
+        lpAmount,
+        tokenAAddress: tokenA.address,
+        tokenBAddress: tokenB.address,
+        pairAddress,
+      };
+
+      // Step 1: Transfer LP tokens to Router
+      setLiquidityStep("transfer_lp");
       writeContract({
-        address: ROUTER_ADDRESS,
-        abi: ROUTER_ABI,
-        functionName: "removeLiquidity",
-        args: [
-          tokenA.address as `0x${string}`,
-          tokenB.address as `0x${string}`,
-          liquidity,
-          amountAMin,
-          amountBMin,
-          address as `0x${string}`,
-          deadline,
-        ],
-        gas: BigInt(400000),
+        address: pairAddress as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "transfer",
+        args: [ROUTER_ADDRESS, liquidity],
       });
 
       toast({
-        title: "⏳ TX_PENDING",
-        description: `Removing ${lpAmount} LP tokens...`,
+        title: "⏳ TRANSFERRING_LP_TOKENS",
+        description: `Step 1/2: Transferring ${lpAmount} LP tokens to Router...`,
       });
     } catch (error: any) {
+      console.error("Remove liquidity error:", error);
+      setLiquidityStep("idle");
       toast({
-        title: "❌ TX_FAILED",
+        title: "❌ REMOVE_FAILED",
         description: error.message || "Failed to remove liquidity",
         variant: "error",
       });
@@ -580,7 +338,7 @@ export default function LiquidityPage() {
           <div className="terminal-card rounded-lg p-1 flex">
             <button
               onClick={() => setMode("add")}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium rounded transition-all ${
+              className={`cursor-pointer flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium rounded transition-all ${
                 mode === "add"
                   ? "bg-primary/10 text-primary border border-primary/20"
                   : "text-muted-foreground hover:text-foreground"
@@ -591,7 +349,7 @@ export default function LiquidityPage() {
             </button>
             <button
               onClick={() => setMode("remove")}
-              className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium rounded transition-all ${
+              className={`cursor-pointer flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium rounded transition-all ${
                 mode === "remove"
                   ? "bg-destructive/10 text-destructive border border-destructive/20"
                   : "text-muted-foreground hover:text-foreground"
@@ -731,7 +489,7 @@ export default function LiquidityPage() {
                   </div>
                 )}
 
-                {/* Single Add Liquidity Button */}
+                {/* Add Liquidity Button */}
                 {!isConnected ? (
                   <Button className="w-full" size="lg" disabled>
                     CONNECT_WALLET_REQUIRED
@@ -741,20 +499,16 @@ export default function LiquidityPage() {
                     className="w-full"
                     size="lg"
                     variant="glow"
-                    onClick={handleApproveAndAdd}
-                    disabled={!amountA || !amountB || !isConnected || isPending || isConfirming}
+                    onClick={handleAddLiquidity}
+                    disabled={!amountA || !amountB || isPending || isConfirming}
                   >
                     {isPending || isConfirming ? (
                       <span className="flex items-center gap-2">
                         <span className="h-4 w-4 rounded-full border-2 border-primary-foreground border-t-transparent animate-spin" />
-                        {approvingTokenA ? `STEP 1/3: APPROVING ${tokenA.symbol}...` :
-                         approvingTokenB ? `STEP 2/3: APPROVING ${tokenB.symbol}...` :
-                         "STEP 3/3: ADDING LIQUIDITY..."}
+                        ADDING_LIQUIDITY...
                       </span>
                     ) : (
-                      needsApprovalA || needsApprovalB
-                        ? `APPROVE & ADD LIQUIDITY`
-                        : "ADD_LIQUIDITY"
+                      "ADD_LIQUIDITY"
                     )}
                   </Button>
                 )}
@@ -768,7 +522,7 @@ export default function LiquidityPage() {
                     {lpBalance !== undefined && (
                       <button
                         onClick={() => setLpAmount(formatUnits(lpBalance, 18))}
-                        className="text-muted-foreground hover:text-primary transition-colors"
+                        className="cursor-pointer text-muted-foreground hover:text-primary transition-colors"
                       >
                         BAL: {parseFloat(formatUnits(lpBalance, 18)).toFixed(6)}
                       </button>
@@ -800,16 +554,16 @@ export default function LiquidityPage() {
                     className="w-full"
                     size="lg"
                     variant="destructive"
-                    onClick={handleApproveAndRemove}
-                    disabled={!lpAmount || !isConnected || isPending || isConfirming}
+                    onClick={handleRemoveLiquidity}
+                    disabled={!lpAmount || isPending || isConfirming}
                   >
                     {isPending || isConfirming ? (
                       <span className="flex items-center gap-2">
                         <span className="h-4 w-4 rounded-full border-2 border-destructive-foreground border-t-transparent animate-spin" />
-                        {approvingLP ? "STEP 1/2: APPROVING LP TOKENS..." : "STEP 2/2: REMOVING LIQUIDITY..."}
+                        REMOVING_LIQUIDITY...
                       </span>
                     ) : (
-                      needsLPApproval ? "APPROVE & REMOVE LIQUIDITY" : "REMOVE_LIQUIDITY"
+                      "REMOVE_LIQUIDITY"
                     )}
                   </Button>
                 )}

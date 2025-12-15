@@ -128,7 +128,7 @@ export function Navbar() {
                         return (
                           <button
                             onClick={openConnectModal}
-                            className="flex items-center gap-2 rounded border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-all hover:bg-primary/20 hover:border-primary/60 hover:shadow-[0_0_15px_rgba(0,255,136,0.15)]"
+                            className="cursor-pointer flex items-center gap-2 rounded border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-all hover:bg-primary/20 hover:border-primary/60 hover:shadow-[0_0_15px_rgba(0,255,136,0.15)]"
                           >
                             <Terminal className="h-3.5 w-3.5" />
                             CONNECT_WALLET
@@ -140,7 +140,7 @@ export function Navbar() {
                         return (
                           <button
                             onClick={openChainModal}
-                            className="flex items-center gap-2 rounded border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs font-medium text-destructive"
+                            className="cursor-pointer flex items-center gap-2 rounded border border-destructive/40 bg-destructive/10 px-4 py-2 text-xs font-medium text-destructive"
                           >
                             WRONG_NETWORK
                           </button>
@@ -151,7 +151,7 @@ export function Navbar() {
                         <div className="flex items-center gap-2">
                           <button
                             onClick={openChainModal}
-                            className="flex items-center gap-2 rounded border border-border/50 bg-muted/30 px-3 py-2 text-xs transition-all hover:border-primary/30"
+                            className="cursor-pointer flex items-center gap-2 rounded border border-border/50 bg-muted/30 px-3 py-2 text-xs transition-all hover:border-primary/30"
                           >
                             {chain.hasIcon && chain.iconUrl && (
                               <img
@@ -167,7 +167,7 @@ export function Navbar() {
 
                           <button
                             onClick={openAccountModal}
-                            className="flex items-center gap-2 rounded border border-primary/30 bg-primary/5 px-4 py-2 text-xs font-medium text-primary transition-all hover:bg-primary/10 hover:border-primary/50"
+                            className="cursor-pointer flex items-center gap-2 rounded border border-primary/30 bg-primary/5 px-4 py-2 text-xs font-medium text-primary transition-all hover:bg-primary/10 hover:border-primary/50"
                           >
                             <span className="font-mono">
                               {account.displayName}
@@ -186,7 +186,7 @@ export function Navbar() {
           </div>
 
           <button
-            className="md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors"
+            className="cursor-pointer md:hidden p-2 text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? (

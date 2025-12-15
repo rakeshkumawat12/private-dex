@@ -117,6 +117,7 @@ contract Router is ReentrancyGuard {
 
     /**
      * @notice Adds liquidity to a token pair
+     * @dev Tokens must be transferred to Router before calling this function
      * @param tokenA Address of token A
      * @param tokenB Address of token B
      * @param amountADesired Desired amount of token A
@@ -147,6 +148,10 @@ contract Router is ReentrancyGuard {
         address pair = pairFor(tokenA, tokenB);
         require(pair != address(0), "Router: pair does not exist");
 
+        // Check router has enough tokens
+        require(IERC20(tokenA).balanceOf(address(this)) >= amountADesired, "Router: insufficient tokenA balance");
+        require(IERC20(tokenB).balanceOf(address(this)) >= amountBDesired, "Router: insufficient tokenB balance");
+
         (uint256 reserveA, uint256 reserveB) = _getReserves(tokenA, tokenB);
 
         if (reserveA == 0 && reserveB == 0) {
@@ -164,13 +169,24 @@ contract Router is ReentrancyGuard {
             }
         }
 
-        IERC20(tokenA).transferFrom(msg.sender, pair, amountA);
-        IERC20(tokenB).transferFrom(msg.sender, pair, amountB);
+        // Transfer tokens from router to pair
+        require(IERC20(tokenA).transfer(pair, amountA), "Router: tokenA transfer failed");
+        require(IERC20(tokenB).transfer(pair, amountB), "Router: tokenB transfer failed");
+
+        // Refund excess tokens back to sender if any
+        if (amountADesired > amountA) {
+            require(IERC20(tokenA).transfer(msg.sender, amountADesired - amountA), "Router: tokenA refund failed");
+        }
+        if (amountBDesired > amountB) {
+            require(IERC20(tokenB).transfer(msg.sender, amountBDesired - amountB), "Router: tokenB refund failed");
+        }
+
         liquidity = IPair(pair).mint(to);
     }
 
     /**
      * @notice Removes liquidity from a token pair
+     * @dev LP tokens must be transferred to Router before calling this function
      * @param tokenA Address of token A
      * @param tokenB Address of token B
      * @param liquidity Amount of LP tokens to burn
@@ -198,7 +214,12 @@ contract Router is ReentrancyGuard {
         address pair = pairFor(tokenA, tokenB);
         require(pair != address(0), "Router: pair does not exist");
 
-        IERC20(pair).transferFrom(msg.sender, pair, liquidity);
+        // Check router has enough LP tokens
+        require(IERC20(pair).balanceOf(address(this)) >= liquidity, "Router: insufficient LP balance");
+
+        // Transfer LP tokens from router to pair
+        require(IERC20(pair).transfer(pair, liquidity), "Router: LP transfer failed");
+
         (uint256 amount0, uint256 amount1) = IPair(pair).burn(to);
         (address token0, ) = sortTokens(tokenA, tokenB);
         (amountA, amountB) = tokenA == token0 ? (amount0, amount1) : (amount1, amount0);
@@ -209,6 +230,7 @@ contract Router is ReentrancyGuard {
 
     /**
      * @notice Swaps exact amount of input tokens for as many output tokens as possible
+     * @dev Input tokens must be transferred to Router before calling this function
      * @param amountIn Exact amount of input tokens
      * @param amountOutMin Minimum amount of output tokens (slippage protection)
      * @param path Array of token addresses representing swap path
@@ -230,12 +252,18 @@ contract Router is ReentrancyGuard {
         address pair = pairFor(path[0], path[1]);
         require(pair != address(0), "Router: pair does not exist");
 
-        IERC20(path[0]).transferFrom(msg.sender, pair, amounts[0]);
+        // Check router has enough input tokens
+        require(IERC20(path[0]).balanceOf(address(this)) >= amounts[0], "Router: insufficient token balance");
+
+        // Transfer input tokens from router to pair
+        require(IERC20(path[0]).transfer(pair, amounts[0]), "Router: token transfer failed");
+
         _swap(amounts, path, to);
     }
 
     /**
      * @notice Swaps input tokens for exact amount of output tokens
+     * @dev Input tokens must be transferred to Router before calling this function
      * @param amountOut Exact amount of output tokens desired
      * @param amountInMax Maximum amount of input tokens (slippage protection)
      * @param path Array of token addresses representing swap path
@@ -257,7 +285,18 @@ contract Router is ReentrancyGuard {
         address pair = pairFor(path[0], path[1]);
         require(pair != address(0), "Router: pair does not exist");
 
-        IERC20(path[0]).transferFrom(msg.sender, pair, amounts[0]);
+        // Check router has enough input tokens
+        require(IERC20(path[0]).balanceOf(address(this)) >= amounts[0], "Router: insufficient token balance");
+
+        // Transfer input tokens from router to pair
+        require(IERC20(path[0]).transfer(pair, amounts[0]), "Router: token transfer failed");
+
+        // Refund excess tokens back to sender
+        uint256 excess = amountInMax - amounts[0];
+        if (excess > 0 && IERC20(path[0]).balanceOf(address(this)) >= excess) {
+            require(IERC20(path[0]).transfer(msg.sender, excess), "Router: refund failed");
+        }
+
         _swap(amounts, path, to);
     }
 

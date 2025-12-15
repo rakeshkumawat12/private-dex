@@ -84,7 +84,7 @@ function TokenCard({ token, index }: { token: typeof MOCK_TOKENS[0]; index: numb
               {!hasMinted && !isMinting && !error && (
                 <button
                   onClick={handleMint}
-                  className="rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-all hover:bg-primary/20 hover:border-primary/60 hover:shadow-[0_0_15px_rgba(0,255,136,0.15)]"
+                  className="cursor-pointer rounded-lg border border-primary/40 bg-primary/10 px-4 py-2 text-xs font-medium text-primary transition-all hover:bg-primary/20 hover:border-primary/60 hover:shadow-[0_0_15px_rgba(0,255,136,0.15)]"
                 >
                   <div className="flex items-center gap-2">
                     <Droplet className="h-3.5 w-3.5" />

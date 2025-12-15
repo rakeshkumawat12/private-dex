@@ -35,7 +35,7 @@ const Toast = ({ title, description, variant = "default", onClose }: ToastProps)
         </div>
         <button
           onClick={onClose}
-          className="rounded-md p-1 hover:bg-accent transition-colors"
+          className="cursor-pointer rounded-md p-1 hover:bg-accent transition-colors"
         >
           <X className="h-4 w-4" />
         </button>
